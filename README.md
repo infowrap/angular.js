@@ -1,3 +1,5 @@
+Forked for IE 8/9 Compatibility using strategy detailed [here](http://samuellam.wordpress.com/2013/08/03/ie-89-cors-support-in-angular-js/).
+
 AngularJS
 =========
 

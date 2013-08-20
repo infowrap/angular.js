@@ -1,5 +1,5 @@
 {
-  "name": "AngularJS",
+  "name": "infowrap-angular",
   "devDependencies": {
     "jquery": "git://github.com/components/jquery.git#v1.8.3",
     "lunr.js": "0.4.0",
@@ -8,5 +8,30 @@
     "bootstrap": "https://raw.github.com/twbs/bootstrap/v2.0.2/docs/assets/bootstrap.zip",
     "closure-compiler": "https://closure-compiler.googlecode.com/files/compiler-20130603.zip",
     "ng-closure-runner": "https://raw.github.com/angular/ng-closure-runner/v0.2.2/assets/ng-closure-runner.zip"
-  }
+  },
+  "version": "0.0.0",
+  "main": "build/angular.min.js",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "build/docs",
+    "build/i18n",
+    "build/*.zip",
+    "build/angular-*",
+    "css",
+    "docs",
+    "example",
+    "i18n",
+    "images",
+    "lib",
+    "logs",
+    "src",
+    "test",
+    "tests",
+    "*.js",
+    "*.sh",
+    "*.rb",
+    "CONTRUBUTING.md"
+  ]
 }
