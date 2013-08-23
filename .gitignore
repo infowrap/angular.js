@@ -1,6 +1,5 @@
 /build/docs
 /build/i18n
-/build/angular-*
 .DS_Store
 gen_docs.disable
 test.disable
