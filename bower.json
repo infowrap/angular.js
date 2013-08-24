@@ -28,7 +28,6 @@
     "src",
     "test",
     "tests",
-    "*.js",
     "*.sh",
     "*.rb",
     "CONTRUBUTING.md"
