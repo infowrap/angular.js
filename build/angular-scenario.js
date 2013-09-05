@@ -9472,7 +9472,7 @@ if ( typeof define === "function" && define.amd && define.amd.jQuery ) {
 })( window );
 
 /**
- * @license AngularJS v1.2.0-ee0bcc5
+ * @license AngularJS v1.2.0-d807a03
  * (c) 2010-2012 Google, Inc. http://angularjs.org
  * License: MIT
  */
@@ -9611,7 +9611,7 @@ if ('i' !== 'I'.toLowerCase()) {
 
 
 var /** holds major version number for IE or NaN for real browsers */
-    msie              = int((/msie (\d+)/.exec(lowercase(navigator.userAgent)) || [])[1]),
+    msie,
     jqLite,           // delay binding since jQuery could be loaded after us.
     jQuery,           // delay binding
     slice             = [].slice,
@@ -9626,6 +9626,16 @@ var /** holds major version number for IE or NaN for real browsers */
     angularModule,
     nodeName_,
     uid               = ['0', '0', '0'];
+
+/**
+ * IE 11 changed the format of the UserAgent string.
+ * See http://msdn.microsoft.com/en-us/library/ms537503.aspx
+ */
+msie = int((/msie (\d+)/.exec(lowercase(navigator.userAgent)) || [])[1]);
+if (isNaN(msie)) {
+  msie = int((/trident\/.*; rv:(\d+)/.exec(lowercase(navigator.userAgent)) || [])[1]);
+}
+
 
 /**
  * @private
@@ -10596,7 +10606,9 @@ function angularInit(element, bootstrap) {
  * They must use {@link api/ng.directive:ngApp ngApp}.
  *
  * @param {Element} element DOM element which is the root of angular application.
- * @param {Array<String|Function>=} modules an array of module declarations. See: {@link angular.module modules}
+ * @param {Array<String|Function|Array>=} modules an array of modules to load into the application.
+ *     Each item in the array should be the name of a predefined module or a (DI annotated)
+ *     function that will be invoked by the injector as a run block. See: {@link angular.module modules}
  * @returns {AUTO.$injector} Returns the newly created injector for this app.
  */
 function bootstrap(element, modules) {
@@ -11018,11 +11030,11 @@ function setupModuleLoader(window) {
  * - `codeName` – `{string}` – Code name of the release, such as "jiggling-armfat".
  */
 var version = {
-  full: '1.2.0-ee0bcc5',    // all of these placeholder strings will be replaced by grunt's
+  full: '1.2.0-d807a03',    // all of these placeholder strings will be replaced by grunt's
   major: 1,    // package task
   minor: 2,
   dot: 0,
-  codeName: 'barehand-atomspliting'
+  codeName: 'ferocious-twitch'
 };
 
 
@@ -12664,8 +12676,36 @@ function createInjector(modulesToLoad) {
  * according to rules specified in
  * {@link http://dev.w3.org/html5/spec/Overview.html#the-indicated-part-of-the-document Html5 spec}.
  *
- * It also watches the `$location.hash()` and scroll whenever it changes to match any anchor.
+ * It also watches the `$location.hash()` and scrolls whenever it changes to match any anchor.
  * This can be disabled by calling `$anchorScrollProvider.disableAutoScrolling()`.
+ * 
+ * @example
+   <example>
+     <file name="index.html">
+       <div ng-controller="MainCtrl">
+         <a ng-click="gotoBottom()">Go to bottom</a>
+         <a id="bottom"></a> You're at the bottom!
+       </div>
+     </file>
+     <file name="script.js">
+       function ScrollCtrl($scope, $location, $anchorScroll) {
+         $scope.gotoBottom = function (){
+           // set the location.hash to the id of
+           // the element you wish to scroll to.
+           $location.hash('bottom');
+           
+           // call $anchorScroll()
+           $anchorScroll();
+         }
+       }
+     </file>
+     <file name="style.css">
+       #bottom {
+         display: block;
+         margin-top: 2000px;
+       }
+     </file>
+   </example>
  */
 function $AnchorScrollProvider() {
 
@@ -12817,7 +12857,7 @@ var $AnimateProvider = ['$provide', function($provide) {
         forEach(element, function(node) {
           parentNode.insertBefore(node, afterNextSibling);
         });
-        $timeout(done || noop, 0, false);
+        done && $timeout(done, 0, false);
       },
 
       /**
@@ -12834,7 +12874,7 @@ var $AnimateProvider = ['$provide', function($provide) {
        */
       leave : function(element, done) {
         element.remove();
-        $timeout(done || noop, 0, false);
+        done && $timeout(done, 0, false);
       },
 
       /**
@@ -12876,7 +12916,7 @@ var $AnimateProvider = ['$provide', function($provide) {
                       className :
                       isArray(className) ? className.join(' ') : '';
         element.addClass(className);
-        $timeout(done || noop, 0, false);
+        done && $timeout(done, 0, false);
       },
 
       /**
@@ -12897,7 +12937,7 @@ var $AnimateProvider = ['$provide', function($provide) {
                       className :
                       isArray(className) ? className.join(' ') : '';
         element.removeClass(className);
-        $timeout(done || noop, 0, false);
+        done && $timeout(done, 0, false);
       },
 
       enabled : noop
@@ -15196,7 +15236,7 @@ function $HttpProvider() {
         // strip json vulnerability protection prefix
         data = data.replace(PROTECTION_PREFIX, '');
         if (JSON_START.test(data) && JSON_END.test(data))
-          data = fromJson(data, true);
+          data = fromJson(data);
       }
       return data;
     }],
@@ -15992,7 +16032,7 @@ function $HttpProvider() {
 
       if (cache) {
         cachedResp = cache.get(url);
-        if (cachedResp) {
+        if (isDefined(cachedResp)) {
           if (cachedResp.then) {
             // cached request has already been sent, but there is no response yet
             cachedResp.then(removePendingReq, removePendingReq);
@@ -16012,7 +16052,7 @@ function $HttpProvider() {
       }
 
       // if we won't have the response in cache, send the request to the backend
-      if (!cachedResp) {
+      if (isUndefined(cachedResp)) {
         $httpBackend(config.method, url, reqData, done, reqHeaders, config.timeout,
             config.withCredentials, config.responseType);
       }
@@ -17075,7 +17115,7 @@ function $LocationProvider(){
    * @name ng.$locationProvider#html5Mode
    * @methodOf ng.$locationProvider
    * @description
-   * @param {string=} mode Use HTML5 strategy if available.
+   * @param {boolean=} mode Use HTML5 strategy if available.
    * @returns {*} current value if used as getter or itself (chaining) if used as setter
    */
   this.html5Mode = function(mode) {
@@ -18352,6 +18392,8 @@ function $ParseProvider() {
  *       // since this fn executes async in a future turn of the event loop, we need to wrap
  *       // our code into an $apply call so that the model changes are properly observed.
  *       scope.$apply(function() {
+ *         deferred.notify('About to greet ' + name + '.');
+ *
  *         if (okToGreet(name)) {
  *           deferred.resolve('Hello, ' + name + '!');
  *         } else {
@@ -18368,6 +18410,8 @@ function $ParseProvider() {
  *     alert('Success: ' + greeting);
  *   }, function(reason) {
  *     alert('Failed: ' + reason);
+ *   }, function(update) {
+ *     alert('Got notification: ' + update);
  *   });
  * </pre>
  *
@@ -18386,7 +18430,8 @@ function $ParseProvider() {
  * A new instance of deferred is constructed by calling `$q.defer()`.
  *
  * The purpose of the deferred object is to expose the associated Promise instance as well as APIs
- * that can be used for signaling the successful or unsuccessful completion of the task.
+ * that can be used for signaling the successful or unsuccessful completion, as well as the status
+ * of the task.
  *
  * **Methods**
  *
@@ -18394,6 +18439,8 @@ function $ParseProvider() {
  *   constructed via `$q.reject`, the promise will be rejected instead.
  * - `reject(reason)` – rejects the derived promise with the `reason`. This is equivalent to
  *   resolving it with a rejection constructed via `$q.reject`.
+ * - `notify(value)` - provides updates on the status of the promises execution. This may be called
+ *   multiple times before the promise is either resolved or rejected.
  *
  * **Properties**
  *
@@ -18410,12 +18457,15 @@ function $ParseProvider() {
  *
  * **Methods**
  *
- * - `then(successCallback, errorCallback)` – regardless of when the promise was or will be resolved
- *   or rejected, `then` calls one of the success or error callbacks asynchronously as soon as the result
- *   is available. The callbacks are called with a single argument: the result or rejection reason.
+ * - `then(successCallback, errorCallback, notifyCallback)` – regardless of when the promise was or
+ *   will be resolved or rejected, `then` calls one of the success or error callbacks asynchronously
+ *   as soon as the result is available. The callbacks are called with a single argument: the result
+ *   or rejection reason. Additionally, the notify callback may be called zero or more times to
+ *   provide a progress indication, before the promise is resolved or rejected.
  *
  *   This method *returns a new promise* which is resolved or rejected via the return value of the
- *   `successCallback` or `errorCallback`.
+ *   `successCallback`, `errorCallback`. It also notifies via the return value of the `notifyCallback`
+ *   method. The promise can not be resolved or rejected from the notifyCallback method.
  *
  * - `catch(errorCallback)` – shorthand for `promise.then(null, errorCallback)`
  *
@@ -18701,7 +18751,12 @@ function qFactory(nextTick, exceptionHandler) {
       then: function(callback, errback) {
         var result = defer();
         nextTick(function() {
-          result.resolve((isFunction(errback) ? errback : defaultErrback)(reason));
+          try {
+            result.resolve((isFunction(errback) ? errback : defaultErrback)(reason));
+          } catch(e) {
+            result.reject(e);
+            exceptionHandler(e);
+          }
         });
         return result.promise;
       }
@@ -18895,8 +18950,8 @@ function $RootScopeProvider(){
     return TTL;
   };
 
-  this.$get = ['$injector', '$exceptionHandler', '$parse',
-      function( $injector,   $exceptionHandler,   $parse) {
+  this.$get = ['$injector', '$exceptionHandler', '$parse', '$browser',
+      function( $injector,   $exceptionHandler,   $parse,   $browser) {
 
     /**
      * @ngdoc function
@@ -18945,6 +19000,7 @@ function $RootScopeProvider(){
       this['this'] = this.$root =  this;
       this.$$destroyed = false;
       this.$$asyncQueue = [];
+      this.$$postDigestQueue = [];
       this.$$listeners = {};
       this.$$isolateBindings = {};
     }
@@ -18959,6 +19015,7 @@ function $RootScopeProvider(){
 
 
     Scope.prototype = {
+      constructor: Scope,
       /**
        * @ngdoc function
        * @name ng.$rootScope.Scope#$new
@@ -18993,6 +19050,7 @@ function $RootScopeProvider(){
           child.$root = this.$root;
           // ensure that there is just one async queue per $rootScope and it's children
           child.$$asyncQueue = this.$$asyncQueue;
+          child.$$postDigestQueue = this.$$postDigestQueue;
         } else {
           Child = function() {}; // should be anonymous; This is so that when the minifier munges
             // the name it does not become random set of chars. These will then show up as class
@@ -19320,6 +19378,7 @@ function $RootScopeProvider(){
         var watch, value, last,
             watchers,
             asyncQueue = this.$$asyncQueue,
+            postDigestQueue = this.$$postDigestQueue,
             length,
             dirty, ttl = TTL,
             next, current, target = this,
@@ -19392,6 +19451,14 @@ function $RootScopeProvider(){
         } while (dirty || asyncQueue.length);
 
         clearPhase();
+
+        while(postDigestQueue.length) {
+          try {
+            postDigestQueue.shift()();
+          } catch (e) {
+            $exceptionHandler(e);
+          }
+        }
       },
 
 
@@ -19492,12 +19559,15 @@ function $RootScopeProvider(){
        *
        * The `$evalAsync` makes no guarantees as to when the `expression` will be executed, only that:
        *
-       *   - it will execute in the current script execution context (before any DOM rendering).
-       *   - at least one {@link ng.$rootScope.Scope#$digest $digest cycle} will be performed after
-       *     `expression` execution.
+       *   - it will execute after the function that schedule the evaluation is done running (preferably before DOM rendering).
+       *   - at least one {@link ng.$rootScope.Scope#$digest $digest cycle} will be performed after `expression` execution.
        *
        * Any exceptions from the execution of the expression are forwarded to the
        * {@link ng.$exceptionHandler $exceptionHandler} service.
+       *
+       * __Note:__ if this function is called outside of `$digest` cycle, a new $digest cycle will be scheduled.
+       * It is however encouraged to always call code that changes the model from withing an `$apply` call.
+       * That includes code evaluated via `$evalAsync`.
        *
        * @param {(string|function())=} expression An angular expression to be executed.
        *
@@ -19506,7 +19576,21 @@ function $RootScopeProvider(){
        *
        */
       $evalAsync: function(expr) {
+        // if we are outside of an $digest loop and this is the first time we are scheduling async task also schedule
+        // async auto-flush
+        if (!$rootScope.$$phase && !$rootScope.$$asyncQueue.length) {
+          $browser.defer(function() {
+            if ($rootScope.$$asyncQueue.length) {
+              $rootScope.$digest();
+            }
+          });
+        }
+
         this.$$asyncQueue.push(expr);
+      },
+
+      $$postDigest : function(expr) {
+        this.$$postDigestQueue.push(expr);
       },
 
       /**
@@ -20846,7 +20930,7 @@ function $TimeoutProvider() {
       var deferred = $q.defer(),
           promise = deferred.promise,
           skipApply = (isDefined(invokeApply) && !invokeApply),
-          timeoutId, cleanup;
+          timeoutId;
 
       timeoutId = $browser.defer(function() {
         try {
@@ -20970,7 +21054,7 @@ function $$UrlUtilsProvider() {
      */
     function resolve(url, parse) {
       var href = url;
-      if (msie) {
+      if (msie <= 11) {
         // Normalize before parse.  Refer Implementation Notes on why this is
         // done in two steps on IE.
         urlParsingNode.setAttribute("href", href);
@@ -22300,7 +22384,8 @@ var htmlAnchorDirective = valueFn({
     </doc:example>
  *
  * @element INPUT
- * @param {expression} ngDisabled Angular expression that will be evaluated.
+ * @param {expression} ngDisabled If the {@link guide/expression expression} is truthy, 
+ *     then special attribute "disabled" will be set on the element
  */
 
 
@@ -22330,7 +22415,8 @@ var htmlAnchorDirective = valueFn({
     </doc:example>
  *
  * @element INPUT
- * @param {expression} ngChecked Angular expression that will be evaluated.
+ * @param {expression} ngChecked If the {@link guide/expression expression} is truthy, 
+ *     then special attribute "checked" will be set on the element
  */
 
 
@@ -22360,7 +22446,8 @@ var htmlAnchorDirective = valueFn({
     </doc:example>
  *
  * @element INPUT
- * @param {string} expression Angular expression that will be evaluated.
+ * @param {expression} ngReadonly If the {@link guide/expression expression} is truthy, 
+ *     then special attribute "readonly" will be set on the element
  */
 
 
@@ -22393,7 +22480,8 @@ var htmlAnchorDirective = valueFn({
     </doc:example>
  *
  * @element OPTION
- * @param {string} expression Angular expression that will be evaluated.
+ * @param {expression} ngSelected If the {@link guide/expression expression} is truthy, 
+ *     then special attribute "selected" will be set on the element
  */
 
 /**
@@ -22425,7 +22513,8 @@ var htmlAnchorDirective = valueFn({
      </doc:example>
  *
  * @element DETAILS
- * @param {string} expression Angular expression that will be evaluated.
+ * @param {expression} ngOpen If the {@link guide/expression expression} is truthy, 
+ *     then special attribute "open" will be set on the element
  */
 
 var ngAttributeAliasDirectives = {};
@@ -24317,8 +24406,8 @@ var ngBindTemplateDirective = ['$interpolate', function($interpolate) {
 var ngBindHtmlDirective = ['$sce', function($sce) {
   return function(scope, element, attr) {
     element.addClass('ng-binding').data('$binding', attr.ngBindHtml);
-    scope.$watch($sce.parseAsHtml(attr.ngBindHtml), function ngBindHtmlWatchAction(value) {
-      element.html(value || '');
+    scope.$watch(attr.ngBindHtml, function ngBindHtmlWatchAction(value) {
+      element.html($sce.getTrustedHtml(value) || '');
     });
   };
 }];
@@ -24474,7 +24563,7 @@ function classDirective(name, selector) {
 
    ## Animations
 
-   Example that demostrates how addition and removal of classes can be animated.
+   The example below demonstrates how to perform animations using ngClass.
 
    <example animations="true">
      <file name="index.html">
@@ -24519,6 +24608,14 @@ function classDirective(name, selector) {
        });
      </file>
    </example>
+
+
+   ## ngClass and pre-existing CSS3 Transitions/Animations
+   The ngClass directive still supports CSS3 Transitions/Animations even if they do not follow the ngAnimate CSS naming structure.
+   Therefore, if any CSS3 Transition/Animation styles (outside of ngAnimate) are set on the element, then, if a ngClass animation
+   is triggered, the ngClass animation will be skipped so that ngAnimate can allow for the pre-existing transition or animation to
+   take over. This restriction allows for ngClass to still work with standard CSS3 Transitions/Animations that are defined
+   outside of ngAnimate.
  */
 var ngClassDirective = classDirective('', true);
 
