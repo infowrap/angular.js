@@ -69,8 +69,8 @@ function $RootScopeProvider(){
     return TTL;
   };
 
-  this.$get = ['$injector', '$exceptionHandler', '$parse',
-      function( $injector,   $exceptionHandler,   $parse) {
+  this.$get = ['$injector', '$exceptionHandler', '$parse', '$browser',
+      function( $injector,   $exceptionHandler,   $parse,   $browser) {
 
     /**
      * @ngdoc function
@@ -119,6 +119,7 @@ function $RootScopeProvider(){
       this['this'] = this.$root =  this;
       this.$$destroyed = false;
       this.$$asyncQueue = [];
+      this.$$postDigestQueue = [];
       this.$$listeners = {};
       this.$$isolateBindings = {};
     }
@@ -133,6 +134,7 @@ function $RootScopeProvider(){
 
 
     Scope.prototype = {
+      constructor: Scope,
       /**
        * @ngdoc function
        * @name ng.$rootScope.Scope#$new
@@ -167,6 +169,7 @@ function $RootScopeProvider(){
           child.$root = this.$root;
           // ensure that there is just one async queue per $rootScope and it's children
           child.$$asyncQueue = this.$$asyncQueue;
+          child.$$postDigestQueue = this.$$postDigestQueue;
         } else {
           Child = function() {}; // should be anonymous; This is so that when the minifier munges
             // the name it does not become random set of chars. These will then show up as class
@@ -494,6 +497,7 @@ function $RootScopeProvider(){
         var watch, value, last,
             watchers,
             asyncQueue = this.$$asyncQueue,
+            postDigestQueue = this.$$postDigestQueue,
             length,
             dirty, ttl = TTL,
             next, current, target = this,
@@ -566,6 +570,14 @@ function $RootScopeProvider(){
         } while (dirty || asyncQueue.length);
 
         clearPhase();
+
+        while(postDigestQueue.length) {
+          try {
+            postDigestQueue.shift()();
+          } catch (e) {
+            $exceptionHandler(e);
+          }
+        }
       },
 
 
@@ -666,12 +678,15 @@ function $RootScopeProvider(){
        *
        * The `$evalAsync` makes no guarantees as to when the `expression` will be executed, only that:
        *
-       *   - it will execute in the current script execution context (before any DOM rendering).
-       *   - at least one {@link ng.$rootScope.Scope#$digest $digest cycle} will be performed after
-       *     `expression` execution.
+       *   - it will execute after the function that schedule the evaluation is done running (preferably before DOM rendering).
+       *   - at least one {@link ng.$rootScope.Scope#$digest $digest cycle} will be performed after `expression` execution.
        *
        * Any exceptions from the execution of the expression are forwarded to the
        * {@link ng.$exceptionHandler $exceptionHandler} service.
+       *
+       * __Note:__ if this function is called outside of `$digest` cycle, a new $digest cycle will be scheduled.
+       * It is however encouraged to always call code that changes the model from withing an `$apply` call.
+       * That includes code evaluated via `$evalAsync`.
        *
        * @param {(string|function())=} expression An angular expression to be executed.
        *
@@ -680,7 +695,21 @@ function $RootScopeProvider(){
        *
        */
       $evalAsync: function(expr) {
+        // if we are outside of an $digest loop and this is the first time we are scheduling async task also schedule
+        // async auto-flush
+        if (!$rootScope.$$phase && !$rootScope.$$asyncQueue.length) {
+          $browser.defer(function() {
+            if ($rootScope.$$asyncQueue.length) {
+              $rootScope.$digest();
+            }
+          });
+        }
+
         this.$$asyncQueue.push(expr);
+      },
+
+      $$postDigest : function(expr) {
+        this.$$postDigestQueue.push(expr);
       },
 
       /**
