@@ -1,5 +1,5 @@
 /**
- * @license AngularJS v1.2.0-ee0bcc5
+ * @license AngularJS v1.2.0-d807a03
  * (c) 2010-2012 Google, Inc. http://angularjs.org
  * License: MIT
  */
@@ -801,6 +801,7 @@ function ngViewFactory(   $route,   $anchorScroll,   $compile,   $controller,   
   return {
     restrict: 'ECA',
     terminal: true,
+    priority: 1000,
     transclude: 'element',
     compile: function(element, attr, linker) {
       return function(scope, $element, attr) {
