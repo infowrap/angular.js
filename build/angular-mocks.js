@@ -1,5 +1,5 @@
 /**
- * @license AngularJS v1.2.0-d807a03
+ * @license AngularJS v1.2.0-954a1bf
  * (c) 2010-2012 Google, Inc. http://angularjs.org
  * License: MIT
  *
@@ -1900,7 +1900,7 @@ angular.mock.clearDataCache = function() {
    * the variable to have the same name of the reference we have a problem, since the parameter
    * to the `inject()` function would hide the outer variable.
    *
-   * To help with this, the injected parameters can, optionally, beenclosing with underscores.
+   * To help with this, the injected parameters can, optionally, be enclosed with underscores.
    * These are ignored by the injector when the reference name is resolved.
    * 
    * For example, the parameter `_myService_` would be resolved as the reference `myService`.
