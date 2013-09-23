@@ -1,5 +1,5 @@
 /**
- * @license AngularJS v1.2.0-954a1bf
+ * @license AngularJS v1.2.0-d91046d
  * (c) 2010-2012 Google, Inc. http://angularjs.org
  * License: MIT
  */
@@ -860,7 +860,7 @@ function bind(self, fn) {
 function toJsonReplacer(key, value) {
   var val = value;
 
-  if (/^\$+/.test(key)) {
+  if (typeof key === 'string' && key.charAt(0) === '$') {
     val = undefined;
   } else if (isWindow(value)) {
     val = '$WINDOW';
@@ -1064,7 +1064,7 @@ function encodeUriQuery(val, pctEncodeSpaces) {
  * HTML document you must manually bootstrap them using {@link angular.bootstrap}.
  * Applications cannot be nested.
  *
- * In the example below if the `ngApp` directive would not be placed
+ * In the example below if the `ngApp` directive were not placed
  * on the `html` element then the document would not be compiled
  * and the `{{ 1+2 }}` would not be resolved to `3`.
  *
@@ -1433,7 +1433,7 @@ function setupModuleLoader(window) {
            * @param {Function} animationFactory Factory function for creating new instance of an animation.
            * @description
            *
-           * **NOTE**: animations are take effect only if the **ngAnimate** module is loaded.
+           * **NOTE**: animations take effect only if the **ngAnimate** module is loaded.
            *
            *
            * Defines an animation hook that can be later used with {@link ngAnimate.$animate $animate} service and
@@ -1557,7 +1557,7 @@ function setupModuleLoader(window) {
  * - `codeName` – `{string}` – Code name of the release, such as "jiggling-armfat".
  */
 var version = {
-  full: '1.2.0-954a1bf',    // all of these placeholder strings will be replaced by grunt's
+  full: '1.2.0-d91046d',    // all of these placeholder strings will be replaced by grunt's
   major: 1,    // package task
   minor: 2,
   dot: 0,
@@ -3710,10 +3710,14 @@ function Browser(window, document, $log, $sniffer) {
   //////////////////////////////////////////////////////////////
 
   /**
+   * @name ng.$browser#baseHref
+   * @methodOf ng.$browser
+   * 
+   * @description
    * Returns current <base href>
    * (always relative - without domain)
    *
-   * @returns {string=}
+   * @returns {string=} current <base href>
    */
   self.baseHref = function() {
     var href = baseElement.attr('href');
@@ -5659,9 +5663,23 @@ function $DocumentProvider(){
  * Any uncaught exception in angular expressions is delegated to this service.
  * The default implementation simply delegates to `$log.error` which logs it into
  * the browser console.
- *
+ * 
  * In unit tests, if `angular-mocks.js` is loaded, this service is overridden by
  * {@link ngMock.$exceptionHandler mock $exceptionHandler} which aids in testing.
+ *
+ * ## Example:
+ * 
+ * <pre>
+ *   angular.module('exceptionOverride', []).factory('$exceptionHandler', function () {
+ *     return function (exception, cause) {
+ *       exception.message += ' (caused by "' + cause + '")';
+ *       throw exception;
+ *     };
+ *   });
+ * </pre>
+ * 
+ * This example will override the normal action of `$exceptionHandler`, to make angular
+ * exceptions fail hard when they happen, instead of just logging to the console.
  *
  * @param {Error} exception Exception associated with the error.
  * @param {string=} cause optional information about the context in which
@@ -5897,6 +5915,33 @@ function $HttpProvider() {
      * will result in the success callback being called. Note that if the response is a redirect,
      * XMLHttpRequest will transparently follow it, meaning that the error callback will not be
      * called for such responses.
+     * 
+     * # Calling $http from outside AngularJS
+     * The `$http` service will not actually send the request until the next `$digest()` is executed.
+     * Normally this is not an issue, since almost all the time your call to `$http` will be from within
+     * a `$apply()` block.
+     * If you are calling `$http` from outside Angular, then you should wrap it in a call to `$apply`
+     * to cause a $digest to occur and also to handle errors in the block correctly.
+     *
+     * ```
+     * $scope.$apply(function() {
+     *   $http(...);
+     * });
+     * ```
+     *
+     * # Writing Unit Tests that use $http
+     * When unit testing you are mostly responsible for scheduling the `$digest` cycle. If you do not
+     * trigger a `$digest` before calling `$httpBackend.flush()` then the request will not have been
+     * made and `$httpBackend.expect(...)` expectations will fail.  The solution is to run the code
+     * that calls the `$http()` method inside a $apply block as explained in the previous section.
+     *
+     * ```
+     * $httpBackend.expectGET(...);
+     * $scope.$apply(function() {
+     *   $http.get(...);
+     * });
+     * $httpBackend.flush();
+     * ```
      *
      * # Shortcut methods
      *
@@ -7963,11 +8008,19 @@ function ensureSafeObject(obj, fullExpression) {
   if (obj && obj.constructor === obj) {
     throw $parseMinErr('isecfn',
         'Referencing Function in Angular expressions is disallowed! Expression: {0}', fullExpression);
+  // 
+  } else if (// isWindow(obj)
+      obj && obj.document && obj.location && obj.alert && obj.setInterval) {
+    throw $parseMinErr('isecwindow',
+        'Referencing the Window in Angular expressions is disallowed! Expression: {0}', fullExpression);
+  } else if (// isElement(obj)
+      obj && (obj.nodeName || (obj.on && obj.find))) {
+    throw $parseMinErr('isecdom',
+        'Referencing DOM nodes in Angular expressions is disallowed! Expression: {0}', fullExpression);
   } else {
     return obj;
   }
 }
-
 
 var OPERATORS = {
     'null':function(){return null;},
@@ -8609,6 +8662,9 @@ function parser(text, json, $filter, csp){
         args.push(argsFn[i](scope, locals));
       }
       var fnPtr = fn(scope, locals, context) || noop;
+
+      ensureSafeObject(fnPtr, text);
+
       // IE stupidity!
       var v = fnPtr.apply
           ? fnPtr.apply(context, args)
@@ -8624,7 +8680,7 @@ function parser(text, json, $filter, csp){
         v = v.$$v;
       }
 
-      return v;
+      return ensureSafeObject(v, text);
     };
   }
 
@@ -10528,12 +10584,6 @@ function $SceDelegateProvider() {
     }
     return resourceUrlBlacklist;
   };
-
-  // Helper functions for matching resource urls by policy.
-  function isCompatibleProtocol(documentProtocol, resourceProtocol) {
-    return ((documentProtocol === resourceProtocol) ||
-            (documentProtocol === "http:" && resourceProtocol === "https:"));
-  }
 
   this.$get = ['$log', '$document', '$injector', '$$urlUtils', function(
                 $log,   $document,   $injector,   $$urlUtils) {
@@ -12612,7 +12662,7 @@ function limitToFilter(){
          <table class="friend">
            <tr>
              <th><a href="" ng-click="predicate = 'name'; reverse=false">Name</a>
-                 (<a href ng-click="predicate = '-name'; reverse=false">^</a>)</th>
+                 (<a href="" ng-click="predicate = '-name'; reverse=false">^</a>)</th>
              <th><a href="" ng-click="predicate = 'phone'; reverse=!reverse">Phone Number</a></th>
              <th><a href="" ng-click="predicate = 'age'; reverse=!reverse">Age</a></th>
            </tr>
@@ -12717,10 +12767,10 @@ function ngDirective(directive) {
  * @restrict E
  *
  * @description
- * Modifies the default behavior of html A tag, so that the default action is prevented when href
- * attribute is empty.
+ * Modifies the default behavior of the html A tag so that the default action is prevented when
+ * the href attribute is empty.
  *
- * The reasoning for this change is to allow easy creation of action links with `ngClick` directive
+ * This change permits the easy creation of action links with the `ngClick` directive
  * without changing the location or causing page reloads, e.g.:
  * `<a href="" ng-click="model.$save()">Save</a>`
  */
@@ -13316,15 +13366,19 @@ function FormController(element, attrs) {
  * Directive that instantiates
  * {@link ng.directive:form.FormController FormController}.
  *
- * If `name` attribute is specified, the form controller is published onto the current scope under
+ * If the `name` attribute is specified, the form controller is published onto the current scope under
  * this name.
  *
  * # Alias: {@link ng.directive:ngForm `ngForm`}
  *
- * In angular forms can be nested. This means that the outer form is valid when all of the child
- * forms are valid as well. However browsers do not allow nesting of `<form>` elements, for this
- * reason angular provides {@link ng.directive:ngForm `ngForm`} alias
- * which behaves identical to `<form>` but allows form nesting.
+ * In Angular forms can be nested. This means that the outer form is valid when all of the child
+ * forms are valid as well. However, browsers do not allow nesting of `<form>` elements, so
+ * Angular provides the {@link ng.directive:ngForm `ngForm`} directive which behaves identically to
+ * `<form>` but can be nested.  This allows you to have nested forms, which is very useful when
+ * using Angular validation directives in forms that are dynamically generated using the
+ * {@link ng.directive:ngRepeat `ngRepeat`} directive. Since you cannot dynamically generate the `name`
+ * attribute of input elements using interpolation, you have to wrap each set of repeated inputs in an
+ * `ngForm` directive and nest these in an outer `form` element.
  *
  *
  * # CSS classes
@@ -13334,12 +13388,12 @@ function FormController(element, attrs) {
  *  - `ng-dirty` Is set if the form is dirty.
  *
  *
- * # Submitting a form and preventing default action
+ * # Submitting a form and preventing the default action
  *
  * Since the role of forms in client-side Angular applications is different than in classical
  * roundtrip apps, it is desirable for the browser not to translate the form submission into a full
  * page reload that sends the data to the server. Instead some javascript logic should be triggered
- * to handle the form submission in application specific way.
+ * to handle the form submission in an application-specific way.
  *
  * For this reason, Angular prevents the default action (form submission to the server) unless the
  * `<form>` element has an `action` attribute specified.
@@ -13351,8 +13405,9 @@ function FormController(element, attrs) {
  * - {@link ng.directive:ngClick ngClick} directive on the first
   *  button or input field of type submit (input[type=submit])
  *
- * To prevent double execution of the handler, use only one of ngSubmit or ngClick directives. This
- * is because of the following form submission rules coming from the html spec:
+ * To prevent double execution of the handler, use only one of the {@link ng.directive:ngSubmit ngSubmit}
+ * or {@link ng.directive:ngClick ngClick} directives.
+ * This is because of the following form submission rules in the HTML specification:
  *
  * - If a form has only one input field then hitting enter in this field triggers form submit
  * (`ngSubmit`)
@@ -14300,18 +14355,18 @@ var VALID_CLASS = 'ng-valid',
  * @description
  *
  * `NgModelController` provides API for the `ng-model` directive. The controller contains
- * services for data-binding, validation, CSS update, value formatting and parsing. It
- * specifically does not contain any logic which deals with DOM rendering or listening to
- * DOM events. The `NgModelController` is meant to be extended by other directives where, the
- * directive provides DOM manipulation and the `NgModelController` provides the data-binding.
- * Note that you cannot use `NgModelController` in a directive with an isolated scope,
- * as, in that case, the `ng-model` value gets put into the isolated scope and does not get
- * propogated to the parent scope.
+ * services for data-binding, validation, CSS updates, and value formatting and parsing. It
+ * purposefully does not contain any logic which deals with DOM rendering or listening to
+ * DOM events. Such DOM related logic should be provided by other directives which make use of
+ * `NgModelController` for data-binding.
  *
- *
+ * ## Custom Control Example
  * This example shows how to use `NgModelController` with a custom control to achieve
  * data-binding. Notice how different directives (`contenteditable`, `ng-model`, and `required`)
  * collaborate together to achieve the desired result.
+ *
+ * Note that `contenteditable` is an HTML5 attribute, which tells the browser to let the element
+ * contents be edited in place by the user.  This will not work on older browsers.
  *
  * <example module="customControl">
     <file name="style.css">
@@ -14383,6 +14438,39 @@ var VALID_CLASS = 'ng-valid',
     </file>
  * </example>
  *
+ * ## Isolated Scope Pitfall
+ *
+ * Note that if you have a directive with an isolated scope, you cannot require `ngModel`
+ * since the model value will be looked up on the isolated scope rather than the outer scope.
+ * When the directive updates the model value, calling `ngModel.$setViewValue()` the property
+ * on the outer scope will not be updated.
+ *
+ * Here is an example of this situation.  You'll notice that even though both 'input' and 'div'
+ * seem to be attached to the same model, they are not kept in synch.
+ *
+ * <example module="badIsolatedDirective">
+    <file name="script.js">
+		angular.module('badIsolatedDirective', []).directive('bad', function() {
+		  return {
+		    require: 'ngModel',
+		    scope: { },
+		    template: '<input ng-model="innerModel">',
+		    link: function(scope, element, attrs, ngModel) {
+		      scope.$watch('innerModel', function(value) {
+		        console.log(value);
+		        ngModel.$setViewValue(value);
+		      });
+		    }
+		  };
+		});
+    </file>
+    <file name="index.html">
+	    <input ng-model="someModel">
+	    <div bad ng-model="someModel"></div>
+    </file>
+ * </example>
+ *
+ * 
  */
 var NgModelController = ['$scope', '$exceptionHandler', '$attrs', '$element', '$parse',
     function($scope, $exceptionHandler, $attr, $element, $parse) {
@@ -14944,11 +15032,15 @@ var ngBindTemplateDirective = ['$interpolate', function($interpolate) {
  * @element ANY
  * @param {expression} ngBindHtml {@link guide/expression Expression} to evaluate.
  */
-var ngBindHtmlDirective = ['$sce', function($sce) {
+var ngBindHtmlDirective = ['$sce', '$parse', function($sce, $parse) {
   return function(scope, element, attr) {
     element.addClass('ng-binding').data('$binding', attr.ngBindHtml);
-    scope.$watch(attr.ngBindHtml, function ngBindHtmlWatchAction(value) {
-      element.html($sce.getTrustedHtml(value) || '');
+
+    var parsed = $parse(attr.ngBindHtml);
+    function getStringValue() { return (parsed(scope) || '').toString(); }
+
+    scope.$watch(getStringValue, function ngBindHtmlWatchAction(value) {
+      element.html($sce.getTrustedHtml(parsed(scope)) || '');
     });
   };
 }];
@@ -15168,10 +15260,10 @@ var ngClassDirective = classDirective('', true);
  *
  * @description
  * The `ngClassOdd` and `ngClassEven` directives work exactly as
- * {@link ng.directive:ngClass ngClass}, except it works in
- * conjunction with `ngRepeat` and takes affect only on odd (even) rows.
+ * {@link ng.directive:ngClass ngClass}, except they work in
+ * conjunction with `ngRepeat` and take effect only on odd (even) rows.
  *
- * This directive can be applied only within a scope of an
+ * This directive can be applied only within the scope of an
  * {@link ng.directive:ngRepeat ngRepeat}.
  *
  * @element ANY
@@ -15216,10 +15308,10 @@ var ngClassOddDirective = classDirective('Odd', 0);
  *
  * @description
  * The `ngClassOdd` and `ngClassEven` directives work exactly as
- * {@link ng.directive:ngClass ngClass}, except it works in
- * conjunction with `ngRepeat` and takes affect only on odd (even) rows.
+ * {@link ng.directive:ngClass ngClass}, except they work in
+ * conjunction with `ngRepeat` and take effect only on odd (even) rows.
  *
- * This directive can be applied only within a scope of an
+ * This directive can be applied only within the scope of an
  * {@link ng.directive:ngRepeat ngRepeat}.
  *
  * @element ANY
@@ -15267,11 +15359,12 @@ var ngClassEvenDirective = classDirective('Even', 1);
  * displayed by the browser in its raw (uncompiled) form while your application is loading. Use this
  * directive to avoid the undesirable flicker effect caused by the html template display.
  *
- * The directive can be applied to the `<body>` element, but typically a fine-grained application is
- * preferred in order to benefit from progressive rendering of the browser view.
+ * The directive can be applied to the `<body>` element, but the preferred usage is to apply
+ * multiple `ngCloak` directives to small portions of the page to permit progressive rendering
+ * of the browser view.
  *
- * `ngCloak` works in cooperation with a css rule that is embedded within `angular.js` and
- *  `angular.min.js` files. Following is the css rule:
+ * `ngCloak` works in cooperation with the following css rule embedded within `angular.js` and
+ *  `angular.min.js`:
  *
  * <pre>
  * [ng\:cloak], [ng-cloak], [data-ng-cloak], [x-ng-cloak], .ng-cloak, .x-ng-cloak {
@@ -15280,17 +15373,17 @@ var ngClassEvenDirective = classDirective('Even', 1);
  * </pre>
  *
  * When this css rule is loaded by the browser, all html elements (including their children) that
- * are tagged with the `ng-cloak` directive are hidden. When Angular comes across this directive
- * during the compilation of the template it deletes the `ngCloak` element attribute, which
- * makes the compiled element visible.
+ * are tagged with the `ngCloak` directive are hidden. When Angular encounters this directive
+ * during the compilation of the template it deletes the `ngCloak` element attribute, making
+ * the compiled element visible.
  *
- * For the best result, `angular.js` script must be loaded in the head section of the html file;
- * alternatively, the css rule (above) must be included in the external stylesheet of the
+ * For the best result, the `angular.js` script must be loaded in the head section of the html
+ * document; alternatively, the css rule above must be included in the external stylesheet of the
  * application.
  *
  * Legacy browsers, like IE7, do not provide attribute selector support (added in CSS 2.1) so they
  * cannot match the `[ng\:cloak]` selector. To work around this limitation, you must add the css
- * class `ngCloak` in addition to `ngCloak` directive as shown in the example below.
+ * class `ngCloak` in addition to the `ngCloak` directive as shown in the example below.
  *
  * @element ANY
  *
@@ -15323,15 +15416,16 @@ var ngCloakDirective = ngDirective({
  * @name ng.directive:ngController
  *
  * @description
- * The `ngController` directive assigns behavior to a scope. This is a key aspect of how angular
+ * The `ngController` directive attaches a controller class to the view. This is a key aspect of how angular
  * supports the principles behind the Model-View-Controller design pattern.
  *
  * MVC components in angular:
  *
- * * Model — The Model is data in scope properties; scopes are attached to the DOM.
- * * View — The template (HTML with data bindings) is rendered into the View.
- * * Controller — The `ngController` directive specifies a Controller class; the class has
- *   methods that typically express the business logic behind the application.
+ * * Model — The Model is scope properties; scopes are attached to DOM where scope properties
+ *   are accessed through bindings.
+ * * View — The template (HTML with data bindings) that is rendered into the View.
+ * * Controller — The `ngController` directive specifies a Controller class; the class contains business
+ *   logic behind the application to decorate the scope with functions and values
  *
  * Note that an alternative way to define controllers is via the {@link ngRoute.$route $route} service.
  *
@@ -15339,8 +15433,8 @@ var ngCloakDirective = ngDirective({
  * @scope
  * @param {expression} ngController Name of a globally accessible constructor function or an
  *     {@link guide/expression expression} that on the current scope evaluates to a
- *     constructor function. The controller instance can further be published into the scope
- *     by adding `as localName` the controller name attribute.
+ *     constructor function. The controller instance can be published into a scope property
+ *     by specifying `as propertyName`.
  *
  * @example
  * Here is a simple form for editing user contact information. Adding, removing, clearing, and
@@ -15532,8 +15626,8 @@ var ngCspDirective = ['$sniffer', function($sniffer) {
  * @name ng.directive:ngClick
  *
  * @description
- * The ngClick allows you to specify custom behavior when
- * element is clicked.
+ * The ngClick directive allows you to specify custom behavior when
+ * an element is clicked.
  *
  * @element ANY
  * @param {expression} ngClick {@link guide/expression Expression} to evaluate upon
@@ -16083,6 +16177,7 @@ var ngIncludeDirective = ['$http', '$templateCache', '$anchorScroll', '$compile'
                   function($http,   $templateCache,   $anchorScroll,   $compile,   $animate,   $sce) {
   return {
     restrict: 'ECA',
+    priority: 1000,
     terminal: true,
     transclude: 'element',
     compile: function(element, attr, transclusion) {
@@ -16820,7 +16915,7 @@ var ngRepeatDirective = ['$parse', '$animate', function($parse, $animate) {
  *
  * @description
  * The `ngShow` directive shows and hides the given HTML element conditionally based on the expression
- * provided to the ngShow attribute. The show and hide mechanism is a achieved by removing and adding
+ * provided to the ngShow attribute. The show and hide mechanism is achieved by removing and adding
  * the `ng-hide` CSS class onto the element. The `.ng-hide` CSS class is a predefined CSS class present
  * in AngularJS which sets the display style to none (using an !important flag).
  *
@@ -17184,7 +17279,7 @@ var ngStyleDirective = ngDirective(function(scope, element, attr) {
  * attribute is displayed.
  *
  * @animations
- * enter - happens after the ngSwtich contents change and the matched child element is placed inside the container
+ * enter - happens after the ngSwitch contents change and the matched child element is placed inside the container
  * leave - happens just after the ngSwitch contents change and just before the former contents are removed from the DOM
  *
  * @usage
@@ -17869,6 +17964,7 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
               modelValue = ctrl.$modelValue,
               values = valuesFn(scope) || [],
               keys = keyName ? sortedKeys(values) : values,
+              key,
               groupLength, length,
               groupIndex, index,
               locals = {},
@@ -17892,8 +17988,17 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
 
           // We now build up the list of options we need (we merge later)
           for (index = 0; length = keys.length, index < length; index++) {
-               locals[valueName] = values[keyName ? locals[keyName]=keys[index]:index];
-               optionGroupName = groupByFn(scope, locals) || '';
+            
+            key = index;
+            if (keyName) {
+              key = keys[index];
+              if ( key.charAt(0) === '$' ) continue;
+              locals[keyName] = key;
+            }
+
+            locals[valueName] = values[key];
+
+            optionGroupName = groupByFn(scope, locals) || '';
             if (!(optionGroup = optionGroups[optionGroupName])) {
               optionGroup = optionGroups[optionGroupName] = [];
               optionGroupNames.push(optionGroupName);
