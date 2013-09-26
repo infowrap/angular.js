@@ -35,7 +35,7 @@ Or by providing an "inline" injection annotation:
 
 ## Defining a Service
 
-Application developers are free to define their own services by registering a their name, and **service
+Application developers are free to define their own services by registering their name, and **service
 factory function**, in Angular modules.
 
 The purpose of the **service factory function** is to generate the single object, or function, that 
