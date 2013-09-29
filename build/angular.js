@@ -1,5 +1,5 @@
 /**
- * @license AngularJS v1.2.0-3ce0118
+ * @license AngularJS v1.2.0-25f8171
  * (c) 2010-2012 Google, Inc. http://angularjs.org
  * License: MIT
  */
@@ -1559,7 +1559,7 @@ function setupModuleLoader(window) {
  * - `codeName` – `{string}` – Code name of the release, such as "jiggling-armfat".
  */
 var version = {
-  full: '1.2.0-3ce0118',    // all of these placeholder strings will be replaced by grunt's
+  full: '1.2.0-25f8171',    // all of these placeholder strings will be replaced by grunt's
   major: 1,    // package task
   minor: 2,
   dot: 0,
@@ -6763,22 +6763,12 @@ var XHR = window.XMLHttpRequest || function() {
  * During testing this implementation is swapped with {@link ngMock.$httpBackend mock
  * $httpBackend} which can be trained with responses.
  */
-function $HttpBackendProvider() {
-  // ORIGINAL
-  // this.$get = ['$browser', '$window', '$document', function($browser, $window, $document) {
-  //   return createHttpBackend($browser, XHR, $browser.defer, $window.angular.callbacks,
-  //       $document[0], $window.location.protocol.replace(':', ''));
-  // }];
-
-  // CUSTOM
-  this.$get = ['$browser', '$window', '$document', function($browser, $window, $document) {
-    var params = [$browser, XHR, $browser.defer, $window.angular.callbacks, $document[0], $window.location.protocol.replace(':', '')]; /*orig xhr */
-    var param4ie = params.concat([msie,createHttpBackend.apply(this,params)]);
-    return (angular.ieCreateHttpBackend && angular.ieCreateHttpBackend.apply(this, param4ie)) ||
-      createHttpBackend.apply(this, params);
-  }];
-  // END CUSTOM
-}
+ function $HttpBackendProvider() {
+   this.$get = ['$browser', '$window', '$document', function($browser, $window, $document) {
+     return createHttpBackend($browser, XHR, $browser.defer, $window.angular.callbacks,
+         $document[0], $window.location.protocol.replace(':', ''));
+   }];
+ }
 
 function createHttpBackend($browser, XHR, $browserDefer, callbacks, rawDocument, locationProtocol) {
   // TODO(vojta): fix the signature
