@@ -287,16 +287,16 @@ describe('Scope', function() {
     it('should watch functions', function() {
       module(provideLog);
       inject(function($rootScope, log) {
-        $rootScope.fn = function() {return 'a'};
+        $rootScope.fn = function() {return 'a';};
         $rootScope.$watch('fn', function(fn) {
           log(fn());
         });
         $rootScope.$digest();
         expect(log).toEqual('a');
-        $rootScope.fn = function() {return 'b'};
+        $rootScope.fn = function() {return 'b';};
         $rootScope.$digest();
         expect(log).toEqual('a; b');
-      })
+      });
     });
 
 
@@ -488,7 +488,7 @@ describe('Scope', function() {
           $rootScope.$digest();
           expect(log).toEqual([ '["b",[],{}]', '["b",{},[]]' ]);
 
-          $rootScope.obj.shift()
+          $rootScope.obj.shift();
           log = [];
           $rootScope.$digest();
           expect(log).toEqual([ '[{},[]]' ]);
@@ -499,14 +499,14 @@ describe('Scope', function() {
           $rootScope.$watchCollection('arrayLikeObject', function logger(obj) {
             forEach(obj, function (element){
               arrayLikelog.push(element.name);
-            })
+            });
           });
           document.body.innerHTML = "<p>" +
                                       "<a name='x'>a</a>" +
                                       "<a name='y'>b</a>" +
                                     "</p>";
 
-          $rootScope.arrayLikeObject =  document.getElementsByTagName('a')
+          $rootScope.arrayLikeObject =  document.getElementsByTagName('a');
           $rootScope.$digest();
           expect(arrayLikelog).toEqual(['x', 'y']);
         });
@@ -565,7 +565,7 @@ describe('Scope', function() {
           log = [];
           $rootScope.$digest();
           expect(log).toEqual([ '{"b":[],"c":"B"}' ]);
-        })
+        });
       });
     });
   });
@@ -766,6 +766,17 @@ describe('Scope', function() {
       expect($rootScope.log).toBe('12');
     }));
 
+    it('should run async expressions in their proper context', inject(function ($rootScope) {
+      var child = $rootScope.$new();
+      $rootScope.ctx = 'root context';
+      $rootScope.log = '';
+      child.ctx = 'child context';
+      child.log = '';
+      child.$evalAsync('log=ctx');
+      $rootScope.$digest();
+      expect($rootScope.log).toBe('');
+      expect(child.log).toBe('child context');
+    }));
 
     it('should operate only with a single queue across all child and isolate scopes', inject(function($rootScope) {
       var childScope = $rootScope.$new();
@@ -777,7 +788,10 @@ describe('Scope', function() {
 
       expect(childScope.$$asyncQueue).toBe($rootScope.$$asyncQueue);
       expect(isolateScope.$$asyncQueue).toBe($rootScope.$$asyncQueue);
-      expect($rootScope.$$asyncQueue).toEqual(['rootExpression', 'childExpression', 'isolateExpression']);
+      expect($rootScope.$$asyncQueue).toEqual([
+        {scope: $rootScope, expression: 'rootExpression'},
+        {scope: childScope, expression: 'childExpression'},
+        {scope: isolateScope, expression: 'isolateExpression'}]);
     }));
 
 
@@ -1046,6 +1060,14 @@ describe('Scope', function() {
         expect(log).toEqual('2>1>0>');
       });
 
+      it('should allow all events on the same scope to run even if stopPropagation is called', function(){
+        child.$on('myEvent', logger);
+        grandChild.$on('myEvent', function(e) { e.stopPropagation(); });
+        grandChild.$on('myEvent', logger);
+        grandChild.$on('myEvent', logger);
+        grandChild.$emit('myEvent');
+        expect(log).toEqual('2>2>2>');
+      });
 
       it('should dispatch exceptions to the $exceptionHandler',
           inject(function($exceptionHandler) {

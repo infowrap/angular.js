@@ -114,6 +114,7 @@ function publishExternalAPI(angular){
         $exceptionHandler: $ExceptionHandlerProvider,
         $filter: $FilterProvider,
         $interpolate: $InterpolateProvider,
+        $interval: $IntervalProvider,
         $http: $HttpProvider,
         $httpBackend: $HttpBackendProvider,
         $location: $LocationProvider,
@@ -126,8 +127,7 @@ function publishExternalAPI(angular){
         $sniffer: $SnifferProvider,
         $templateCache: $TemplateCacheProvider,
         $timeout: $TimeoutProvider,
-        $window: $WindowProvider,
-        $$urlUtils: $$UrlUtilsProvider
+        $window: $WindowProvider
       });
     }
   ]);

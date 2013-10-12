@@ -384,11 +384,6 @@ var inputType = {
 };
 
 
-function isEmpty(value) {
-  return isUndefined(value) || value === '' || value === null || value !== value;
-}
-
-
 function textInputType(scope, element, attr, ctrl, $sniffer, $browser) {
 
   var listener = function() {
@@ -445,7 +440,7 @@ function textInputType(scope, element, attr, ctrl, $sniffer, $browser) {
 
 
   ctrl.$render = function() {
-    element.val(isEmpty(ctrl.$viewValue) ? '' : ctrl.$viewValue);
+    element.val(ctrl.$isEmpty(ctrl.$viewValue) ? '' : ctrl.$viewValue);
   };
 
   // pattern validator
@@ -454,7 +449,7 @@ function textInputType(scope, element, attr, ctrl, $sniffer, $browser) {
       match;
 
   var validate = function(regexp, value) {
-    if (isEmpty(value) || regexp.test(value)) {
+    if (ctrl.$isEmpty(value) || regexp.test(value)) {
       ctrl.$setValidity('pattern', true);
       return value;
     } else {
@@ -468,7 +463,7 @@ function textInputType(scope, element, attr, ctrl, $sniffer, $browser) {
     if (match) {
       pattern = new RegExp(match[1], match[2]);
       patternValidator = function(value) {
-        return validate(pattern, value)
+        return validate(pattern, value);
       };
     } else {
       patternValidator = function(value) {
@@ -491,7 +486,7 @@ function textInputType(scope, element, attr, ctrl, $sniffer, $browser) {
   if (attr.ngMinlength) {
     var minlength = int(attr.ngMinlength);
     var minLengthValidator = function(value) {
-      if (!isEmpty(value) && value.length < minlength) {
+      if (!ctrl.$isEmpty(value) && value.length < minlength) {
         ctrl.$setValidity('minlength', false);
         return undefined;
       } else {
@@ -508,7 +503,7 @@ function textInputType(scope, element, attr, ctrl, $sniffer, $browser) {
   if (attr.ngMaxlength) {
     var maxlength = int(attr.ngMaxlength);
     var maxLengthValidator = function(value) {
-      if (!isEmpty(value) && value.length > maxlength) {
+      if (!ctrl.$isEmpty(value) && value.length > maxlength) {
         ctrl.$setValidity('maxlength', false);
         return undefined;
       } else {
@@ -526,7 +521,7 @@ function numberInputType(scope, element, attr, ctrl, $sniffer, $browser) {
   textInputType(scope, element, attr, ctrl, $sniffer, $browser);
 
   ctrl.$parsers.push(function(value) {
-    var empty = isEmpty(value);
+    var empty = ctrl.$isEmpty(value);
     if (empty || NUMBER_REGEXP.test(value)) {
       ctrl.$setValidity('number', true);
       return value === '' ? null : (empty ? value : parseFloat(value));
@@ -537,13 +532,13 @@ function numberInputType(scope, element, attr, ctrl, $sniffer, $browser) {
   });
 
   ctrl.$formatters.push(function(value) {
-    return isEmpty(value) ? '' : '' + value;
+    return ctrl.$isEmpty(value) ? '' : '' + value;
   });
 
   if (attr.min) {
     var min = parseFloat(attr.min);
     var minValidator = function(value) {
-      if (!isEmpty(value) && value < min) {
+      if (!ctrl.$isEmpty(value) && value < min) {
         ctrl.$setValidity('min', false);
         return undefined;
       } else {
@@ -559,7 +554,7 @@ function numberInputType(scope, element, attr, ctrl, $sniffer, $browser) {
   if (attr.max) {
     var max = parseFloat(attr.max);
     var maxValidator = function(value) {
-      if (!isEmpty(value) && value > max) {
+      if (!ctrl.$isEmpty(value) && value > max) {
         ctrl.$setValidity('max', false);
         return undefined;
       } else {
@@ -574,7 +569,7 @@ function numberInputType(scope, element, attr, ctrl, $sniffer, $browser) {
 
   ctrl.$formatters.push(function(value) {
 
-    if (isEmpty(value) || isNumber(value)) {
+    if (ctrl.$isEmpty(value) || isNumber(value)) {
       ctrl.$setValidity('number', true);
       return value;
     } else {
@@ -588,7 +583,7 @@ function urlInputType(scope, element, attr, ctrl, $sniffer, $browser) {
   textInputType(scope, element, attr, ctrl, $sniffer, $browser);
 
   var urlValidator = function(value) {
-    if (isEmpty(value) || URL_REGEXP.test(value)) {
+    if (ctrl.$isEmpty(value) || URL_REGEXP.test(value)) {
       ctrl.$setValidity('url', true);
       return value;
     } else {
@@ -605,7 +600,7 @@ function emailInputType(scope, element, attr, ctrl, $sniffer, $browser) {
   textInputType(scope, element, attr, ctrl, $sniffer, $browser);
 
   var emailValidator = function(value) {
-    if (isEmpty(value) || EMAIL_REGEXP.test(value)) {
+    if (ctrl.$isEmpty(value) || EMAIL_REGEXP.test(value)) {
       ctrl.$setValidity('email', true);
       return value;
     } else {
@@ -655,6 +650,11 @@ function checkboxInputType(scope, element, attr, ctrl) {
 
   ctrl.$render = function() {
     element[0].checked = ctrl.$viewValue;
+  };
+
+  // Override the standard `$isEmpty` because a value of `false` means empty in a checkbox.
+  ctrl.$isEmpty = function(value) {
+    return value !== trueValue;
   };
 
   ctrl.$formatters.push(function(value) {
@@ -958,7 +958,7 @@ var VALID_CLASS = 'ng-valid',
     </file>
  * </example>
  *
- * 
+ *
  */
 var NgModelController = ['$scope', '$exceptionHandler', '$attrs', '$element', '$parse',
     function($scope, $exceptionHandler, $attr, $element, $parse) {
@@ -991,6 +991,25 @@ var NgModelController = ['$scope', '$exceptionHandler', '$attrs', '$element', '$
    * directive will implement this method.
    */
   this.$render = noop;
+
+  /**
+   * @ngdoc function
+   * @name { ng.directive:ngModel.NgModelController#$isEmpty
+   * @methodOf ng.directive:ngModel.NgModelController
+   *
+   * @description
+   * This is called when we need to determine if the value of the input is empty.
+   * 
+   * For instance, the required directive does this to work out if the input has data or not.
+   * The default `$isEmpty` function checks whether the value is `undefined`, `''`, `null` or `NaN`.
+   * 
+   * You can override this for input directives whose concept of being empty is different to the
+   * default. The `checkboxInputType` directive does this because in its case a value of `false`
+   * implies empty.
+   */
+  this.$isEmpty = function(value) {
+    return isUndefined(value) || value === '' || value === null || value !== value;
+  };
 
   var parentForm = $element.inheritedData('$formController') || nullFormCtrl,
       invalidCount = 0, // used to easily determine if we are valid
@@ -1145,18 +1164,18 @@ var NgModelController = ['$scope', '$exceptionHandler', '$attrs', '$element', '$
  * @element input
  *
  * @description
- * Is a directive that tells Angular to do two-way data binding. It works together with `input`,
- * `select`, `textarea` and even custom form controls that use {@link ng.directive:ngModel.NgModelController
- * NgModelController} exposed by this directive.
+ * The `ngModel` directive binds an `input`,`select`, `textarea` (or custom form control) to a
+ * property on the scope using {@link ng.directive:ngModel.NgModelController NgModelController},
+ * which is created and exposed by this directive.
  *
  * `ngModel` is responsible for:
  *
- * - binding the view into the model, which other directives such as `input`, `textarea` or `select`
- *   require,
- * - providing validation behavior (i.e. required, number, email, url),
- * - keeping state of the control (valid/invalid, dirty/pristine, validation errors),
- * - setting related css class onto the element (`ng-valid`, `ng-invalid`, `ng-dirty`, `ng-pristine`),
- * - register the control with parent {@link ng.directive:form form}.
+ * - Binding the view into the model, which other directives such as `input`, `textarea` or `select`
+ *   require.
+ * - Providing validation behavior (i.e. required, number, email, url).
+ * - Keeping the state of the control (valid/invalid, dirty/pristine, validation errors).
+ * - Setting related css classes on the element (`ng-valid`, `ng-invalid`, `ng-dirty`, `ng-pristine`).
+ * - Registering the control with its parent {@link ng.directive:form form}.
  *
  * Note: `ngModel` will try to bind to the property given by evaluating the expression on the
  * current scope. If the property doesn't already exist on this scope, it will be created
@@ -1266,7 +1285,7 @@ var requiredDirective = function() {
       attr.required = true; // force truthy in case we are on non input element
 
       var validator = function(value) {
-        if (attr.required && (isEmpty(value) || value === false)) {
+        if (attr.required && ctrl.$isEmpty(value)) {
           ctrl.$setValidity('required', false);
           return;
         } else {
@@ -1291,7 +1310,8 @@ var requiredDirective = function() {
  * @name ng.directive:ngList
  *
  * @description
- * Text input that converts between comma-separated string into an array of strings.
+ * Text input that converts between a delimited string and an array of strings. The delimiter
+ * can be a fixed string (by default a comma) or a regular expression.
  *
  * @element input
  * @param {string=} ngList optional delimiter that should be used to split the value. If
@@ -1326,7 +1346,7 @@ var requiredDirective = function() {
 
         it('should be invalid if empty', function() {
           input('names').enter('');
-          expect(binding('names')).toEqual('[]');
+          expect(binding('names')).toEqual('');
           expect(binding('myForm.namesInput.$valid')).toEqual('false');
           expect(element('span.error').css('display')).not().toBe('none');
         });
@@ -1341,6 +1361,9 @@ var ngListDirective = function() {
           separator = match && new RegExp(match[1]) || attr.ngList || ',';
 
       var parse = function(viewValue) {
+        // If the viewValue is invalid (say required but empty) it will be `undefined`
+        if (isUndefined(viewValue)) return;
+
         var list = [];
 
         if (viewValue) {
@@ -1360,23 +1383,77 @@ var ngListDirective = function() {
 
         return undefined;
       });
+
+      // Override the standard $isEmpty because an empty array means the input is empty.
+      ctrl.$isEmpty = function(value) {
+        return !value || !value.length;
+      };
     }
   };
 };
 
 
 var CONSTANT_VALUE_REGEXP = /^(true|false|\d+)$/;
-
+/**
+ * @ngdoc directive
+ * @name ng.directive:ngValue
+ *
+ * @description
+ * Binds the given expression to the value of `input[select]` or `input[radio]`, so
+ * that when the element is selected, the `ngModel` of that element is set to the
+ * bound value.
+ *
+ * `ngValue` is useful when dynamically generating lists of radio buttons using `ng-repeat`, as
+ * shown below.
+ *
+ * @element input
+ * @param {string=} ngValue angular expression, whose value will be bound to the `value` attribute
+ *   of the `input` element
+ *
+ * @example
+    <doc:example>
+      <doc:source>
+       <script>
+          function Ctrl($scope) {
+            $scope.names = ['pizza', 'unicorns', 'robots'];
+            $scope.my = { favorite: 'unicorns' };
+          }
+       </script>
+        <form ng-controller="Ctrl">
+          <h2>Which is your favorite?</h2>
+            <label ng-repeat="name in names" for="{{name}}">
+              {{name}}
+              <input type="radio"
+                     ng-model="my.favorite"
+                     ng-value="name"
+                     id="{{name}}"
+                     name="favorite">
+            </label>
+          </span>
+          <div>You chose {{my.favorite}}</div>
+        </form>
+      </doc:source>
+      <doc:scenario>
+        it('should initialize to model', function() {
+          expect(binding('my.favorite')).toEqual('unicorns');
+        });
+        it('should bind the values to the inputs', function() {
+          input('my.favorite').select('pizza');
+          expect(binding('my.favorite')).toEqual('pizza');
+        });
+      </doc:scenario>
+    </doc:example>
+ */
 var ngValueDirective = function() {
   return {
     priority: 100,
     compile: function(tpl, tplAttr) {
       if (CONSTANT_VALUE_REGEXP.test(tplAttr.ngValue)) {
-        return function(scope, elm, attr) {
+        return function ngValueConstantLink(scope, elm, attr) {
           attr.$set('value', scope.$eval(attr.ngValue));
         };
       } else {
-        return function(scope, elm, attr) {
+        return function ngValueLink(scope, elm, attr) {
           scope.$watch(attr.ngValue, function valueWatchAction(value) {
             attr.$set('value', value);
           });

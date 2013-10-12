@@ -97,10 +97,10 @@
  * (a DOM element/tree) to a scope. Where:
  *
  *  * `scope` - A {@link ng.$rootScope.Scope Scope} to bind to.
- *  * `cloneAttachFn` - If `cloneAttachFn` is provided, then the link function will clone the
- *               `template` and call the `cloneAttachFn` function allowing the caller to attach the
- *               cloned elements to the DOM document at the appropriate place. The `cloneAttachFn` is
- *               called as: <br> `cloneAttachFn(clonedElement, scope)` where:
+ *  * `cloneAttachFn` - If `cloneAttachFn` is provided, then the link function will clone the `template`
+ *  and call the `cloneAttachFn` function allowing the caller to attach the
+ *  cloned elements to the DOM document at the appropriate place. The `cloneAttachFn` is
+ *  called as: <br> `cloneAttachFn(clonedElement, scope)` where:
  *
  *      * `clonedElement` - is a clone of the original `element` passed into the compiler.
  *      * `scope` - is the current scope with which the linking function is working with.
@@ -153,13 +153,13 @@ function $CompileProvider($provide) {
       Suffix = 'Directive',
       COMMENT_DIRECTIVE_REGEXP = /^\s*directive\:\s*([\d\w\-_]+)\s+(.*)$/,
       CLASS_DIRECTIVE_REGEXP = /(([\d\w\-_]+)(?:\:([^;]+))?;?)/,
-      aHrefSanitizationWhitelist = /^\s*(https?|ftp|mailto|file):/,
+      aHrefSanitizationWhitelist = /^\s*(https?|ftp|mailto|tel|file):/,
       imgSrcSanitizationWhitelist = /^\s*(https?|ftp|file):|data:image\//;
 
   // Ref: http://developers.whatwg.org/webappapis.html#event-handler-idl-attributes
   // The assumption is that future DOM event attribute names will begin with
   // 'on' and be composed of only English letters.
-  var EVENT_HANDLER_ATTR_REGEXP = /^(on[a-z]*|formaction)$/;
+  var EVENT_HANDLER_ATTR_REGEXP = /^(on[a-z]+|formaction)$/;
 
   /**
    * @ngdoc function
@@ -178,6 +178,7 @@ function $CompileProvider($provide) {
    * @returns {ng.$compileProvider} Self for chaining.
    */
    this.directive = function registerDirective(name, directiveFactory) {
+    assertNotHasOwnProperty(name, 'directive');
     if (isString(name)) {
       assertArg(directiveFactory, 'directiveFactory');
       if (!hasDirectives.hasOwnProperty(name)) {
@@ -185,7 +186,7 @@ function $CompileProvider($provide) {
         $provide.factory(name + Suffix, ['$injector', '$exceptionHandler',
           function($injector, $exceptionHandler) {
             var directives = [];
-            forEach(hasDirectives[name], function(directiveFactory) {
+            forEach(hasDirectives[name], function(directiveFactory, index) {
               try {
                 var directive = $injector.invoke(directiveFactory);
                 if (isFunction(directive)) {
@@ -194,6 +195,7 @@ function $CompileProvider($provide) {
                   directive.compile = valueFn(directive.link);
                 }
                 directive.priority = directive.priority || 0;
+                directive.index = index;
                 directive.name = directive.name || name;
                 directive.require = directive.require || (directive.controller && directive.name);
                 directive.restrict = directive.restrict || 'A';
@@ -275,9 +277,9 @@ function $CompileProvider($provide) {
 
   this.$get = [
             '$injector', '$interpolate', '$exceptionHandler', '$http', '$templateCache', '$parse',
-            '$controller', '$rootScope', '$document', '$sce', '$$urlUtils', '$animate',
+            '$controller', '$rootScope', '$document', '$sce', '$animate',
     function($injector,   $interpolate,   $exceptionHandler,   $http,   $templateCache,   $parse,
-             $controller,   $rootScope,   $document,   $sce,   $$urlUtils, $animate) {
+             $controller,   $rootScope,   $document,   $sce,   $animate) {
 
     var Attributes = function(element, attr) {
       this.$$element = element;
@@ -369,9 +371,9 @@ function $CompileProvider($provide) {
           // sanitize a[href] and img[src] values
           if ((nodeName === 'A' && key === 'href') ||
               (nodeName === 'IMG' && key === 'src')) {
-            // NOTE: $$urlUtils.resolve() doesn't support IE < 8 so we don't sanitize for that case.
+            // NOTE: urlResolve() doesn't support IE < 8 so we don't sanitize for that case.
             if (!msie || msie >= 8 ) {
-              normalizedVal = $$urlUtils.resolve(value);
+              normalizedVal = urlResolve(value).href;
               if (normalizedVal !== '') {
                 if ((key === 'href' && !normalizedVal.match(aHrefSanitizationWhitelist)) ||
                     (key === 'src' && !normalizedVal.match(imgSrcSanitizationWhitelist))) {
@@ -425,9 +427,11 @@ function $CompileProvider($provide) {
        * @function
        *
        * @description
-       * Observe an interpolated attribute.
-       * The observer will never be called, if given attribute is not interpolated.
-       * The interpolated value of the attribute is passed to the observer function.
+       * Observes an interpolated attribute.
+       *
+       * The observer function will be invoked once during the next `$digest` following
+       * compilation. The observer is then invoked whenever the interpolated value
+       * changes.
        *
        * @param {string} key Normalized key. (ie ngAttribute) .
        * @param {function(interpolatedValue)} fn Function that will be called whenever
@@ -451,8 +455,7 @@ function $CompileProvider($provide) {
       }
     };
 
-    var urlSanitizationNode = $document[0].createElement('a'),
-        startSymbol = $interpolate.startSymbol(),
+    var startSymbol = $interpolate.startSymbol(),
         endSymbol = $interpolate.endSymbol(),
         denormalizeTemplate = (startSymbol == '{{' || endSymbol  == '}}')
             ? identity
@@ -466,7 +469,7 @@ function $CompileProvider($provide) {
 
     //================================
 
-    function compile($compileNodes, transcludeFn, maxPriority, ignoreDirective) {
+    function compile($compileNodes, transcludeFn, maxPriority, ignoreDirective, previousCompileContext) {
       if (!($compileNodes instanceof jqLite)) {
         // jquery always rewraps, whereas we need to preserve the original selector so that we can modify it.
         $compileNodes = jqLite($compileNodes);
@@ -478,7 +481,7 @@ function $CompileProvider($provide) {
           $compileNodes[index] = node = jqLite(node).wrap('<span></span>').parent()[0];
         }
       });
-      var compositeLinkFn = compileNodes($compileNodes, transcludeFn, $compileNodes, maxPriority, ignoreDirective);
+      var compositeLinkFn = compileNodes($compileNodes, transcludeFn, $compileNodes, maxPriority, ignoreDirective, previousCompileContext);
       return function publicLinkFn(scope, cloneConnectFn){
         assertArg(scope, 'scope');
         // important!!: we must call our jqLite.clone() since the jQuery one is trying to be smart
@@ -525,7 +528,7 @@ function $CompileProvider($provide) {
      * @param {number=} max directive priority
      * @returns {?function} A composite linking function of all of the matched directives or null.
      */
-    function compileNodes(nodeList, transcludeFn, $rootElement, maxPriority, ignoreDirective) {
+    function compileNodes(nodeList, transcludeFn, $rootElement, maxPriority, ignoreDirective, previousCompileContext) {
       var linkFns = [],
           nodeLinkFn, childLinkFn, directives, attrs, linkFnFound;
 
@@ -536,7 +539,7 @@ function $CompileProvider($provide) {
         directives = collectDirectives(nodeList[i], [], attrs, i == 0 ? maxPriority : undefined, ignoreDirective);
 
         nodeLinkFn = (directives.length)
-            ? applyDirectivesToNode(directives, nodeList[i], attrs, transcludeFn, $rootElement)
+            ? applyDirectivesToNode(directives, nodeList[i], attrs, transcludeFn, $rootElement, null, [], [], previousCompileContext)
             : null;
 
         childLinkFn = (nodeLinkFn && nodeLinkFn.terminal || !nodeList[i].childNodes || !nodeList[i].childNodes.length)
@@ -547,6 +550,7 @@ function $CompileProvider($provide) {
         linkFns.push(nodeLinkFn);
         linkFns.push(childLinkFn);
         linkFnFound = (linkFnFound || nodeLinkFn || childLinkFn);
+        previousCompileContext = null; //use the previous context only for the first element in the virtual group
       }
 
       // return a linking function if we have found anything, null otherwise
@@ -631,7 +635,7 @@ function $CompileProvider($provide) {
               // support ngAttr attribute binding
               ngAttrName = directiveNormalize(name);
               if (NG_ATTR_BINDING.test(ngAttrName)) {
-                name = ngAttrName.substr(6).toLowerCase();
+                name = snake_case(ngAttrName.substr(6), '-');
               }
 
               var directiveNName = ngAttrName.replace(/(Start|End)$/, '');
@@ -747,20 +751,26 @@ function $CompileProvider($provide) {
      *        scope argument is auto-generated to the new child of the transcluded parent scope.
      * @param {JQLite} jqCollection If we are working on the root of the compile tree then this
      *        argument has the root jqLite array so that we can replace nodes on it.
+     * @param {Object=} originalReplaceDirective An optional directive that will be ignored when compiling
+     *        the transclusion.
+     * @param {Array.<Function>} preLinkFns
+     * @param {Array.<Function>} postLinkFns
+     * @param {Object} previousCompileContext Context used for previous compilation of the current node
      * @returns linkFn
      */
-    function applyDirectivesToNode(directives, compileNode, templateAttrs, transcludeFn, jqCollection, originalReplaceDirective) {
+    function applyDirectivesToNode(directives, compileNode, templateAttrs, transcludeFn, jqCollection,
+        originalReplaceDirective, preLinkFns, postLinkFns, previousCompileContext) {
+      previousCompileContext = previousCompileContext || {};
+
       var terminalPriority = -Number.MAX_VALUE,
-          preLinkFns = [],
-          postLinkFns = [],
-          newScopeDirective = null,
-          newIsolateScopeDirective = null,
-          templateDirective = null,
+          newScopeDirective,
+          newIsolateScopeDirective = previousCompileContext.newIsolateScopeDirective,
+          templateDirective = previousCompileContext.templateDirective,
           $compileNode = templateAttrs.$$element = jqLite(compileNode),
           directive,
           directiveName,
           $template,
-          transcludeDirective,
+          transcludeDirective = previousCompileContext.transcludeDirective,
           replaceDirective = originalReplaceDirective,
           childTranscludeFn = transcludeFn,
           controllerDirectives,
@@ -784,18 +794,24 @@ function $CompileProvider($provide) {
         }
 
         if (directiveValue = directive.scope) {
-          assertNoDuplicate('isolated scope', newIsolateScopeDirective, directive, $compileNode);
-          if (isObject(directiveValue)) {
-            safeAddClass($compileNode, 'ng-isolate-scope');
-            newIsolateScopeDirective = directive;
-          }
-          safeAddClass($compileNode, 'ng-scope');
           newScopeDirective = newScopeDirective || directive;
+
+          // skip the check for directives with async templates, we'll check the derived sync directive when
+          // the template arrives
+          if (!directive.templateUrl) {
+            assertNoDuplicate('new/isolated scope', newIsolateScopeDirective, directive, $compileNode);
+            if (isObject(directiveValue)) {
+              safeAddClass($compileNode, 'ng-isolate-scope');
+              newIsolateScopeDirective = directive;
+            }
+            safeAddClass($compileNode, 'ng-scope');
+          }
         }
 
         directiveName = directive.name;
 
-        if (directiveValue = directive.controller) {
+        if (!directive.templateUrl && directive.controller) {
+          directiveValue = directive.controller;
           controllerDirectives = controllerDirectives || {};
           assertNoDuplicate("'" + directiveName + "' controller",
               controllerDirectives[directiveName], directive, $compileNode);
@@ -803,18 +819,27 @@ function $CompileProvider($provide) {
         }
 
         if (directiveValue = directive.transclude) {
-          assertNoDuplicate('transclusion', transcludeDirective, directive, $compileNode);
-          transcludeDirective = directive;
-          terminalPriority = directive.priority;
+          // Special case ngRepeat so that we don't complain about duplicate transclusion, ngRepeat knows how to handle
+          // this on its own.
+          if (directiveName !== 'ngRepeat') {
+            assertNoDuplicate('transclusion', transcludeDirective, directive, $compileNode);
+            transcludeDirective = directive;
+          }
+
           if (directiveValue == 'element') {
-            $template = groupScan(compileNode, attrStart, attrEnd)
+            terminalPriority = directive.priority;
+            $template = groupScan(compileNode, attrStart, attrEnd);
             $compileNode = templateAttrs.$$element =
                 jqLite(document.createComment(' ' + directiveName + ': ' + templateAttrs[directiveName] + ' '));
             compileNode = $compileNode[0];
             replaceWith(jqCollection, jqLite(sliceArgs($template)), compileNode);
 
             childTranscludeFn = compile($template, transcludeFn, terminalPriority,
-                                        replaceDirective && replaceDirective.name);
+                                        replaceDirective && replaceDirective.name, {
+                                          newIsolateScopeDirective: newIsolateScopeDirective,
+                                          transcludeDirective: transcludeDirective,
+                                          templateDirective: templateDirective
+                                        });
           } else {
             $template = jqLite(JQLiteClone(compileNode)).contents();
             $compileNode.html(''); // clear contents
@@ -874,8 +899,13 @@ function $CompileProvider($provide) {
           if (directive.replace) {
             replaceDirective = directive;
           }
-          nodeLinkFn = compileTemplateUrl(directives.splice(i, directives.length - i),
-              nodeLinkFn, $compileNode, templateAttrs, jqCollection, childTranscludeFn);
+
+          nodeLinkFn = compileTemplateUrl(directives.splice(i, directives.length - i), $compileNode,
+              templateAttrs, jqCollection, childTranscludeFn, preLinkFns, postLinkFns, {
+                newIsolateScopeDirective: newIsolateScopeDirective,
+                transcludeDirective: transcludeDirective,
+                templateDirective: templateDirective
+              });
           ii = directives.length;
         } else if (directive.compile) {
           try {
@@ -1082,7 +1112,7 @@ function $CompileProvider($provide) {
         childLinkFn && childLinkFn(scope, linkNode.childNodes, undefined, boundTranscludeFn);
 
         // POSTLINKING
-        for(i = 0, ii = postLinkFns.length; i < ii; i++) {
+        for(i = postLinkFns.length - 1; i >= 0; i--) {
           try {
             linkFn = postLinkFns[i];
             linkFn(scope, $element, attrs,
@@ -1162,6 +1192,9 @@ function $CompileProvider($provide) {
           dst['class'] = (dst['class'] ? dst['class'] + ' ' : '') + value;
         } else if (key == 'style') {
           $element.attr('style', $element.attr('style') + ';' + value);
+          // `dst` will never contain hasOwnProperty as DOM parser won't let it.
+          // You will get an "InvalidCharacterError: DOM Exception 5" error if you
+          // have an attribute like "has-own-property" or "data-has-own-property", etc.
         } else if (key.charAt(0) != '$' && !dst.hasOwnProperty(key)) {
           dst[key] = value;
           dstAttr[key] = srcAttr[key];
@@ -1170,8 +1203,8 @@ function $CompileProvider($provide) {
     }
 
 
-    function compileTemplateUrl(directives, beforeTemplateNodeLinkFn, $compileNode, tAttrs,
-        $rootElement, childTranscludeFn) {
+    function compileTemplateUrl(directives, $compileNode, tAttrs,
+        $rootElement, childTranscludeFn, preLinkFns, postLinkFns, previousCompileContext) {
       var linkQueue = [],
           afterTemplateNodeLinkFn,
           afterTemplateChildLinkFn,
@@ -1179,7 +1212,7 @@ function $CompileProvider($provide) {
           origAsyncDirective = directives.shift(),
           // The fact that we have to copy and patch the directive seems wrong!
           derivedSyncDirective = extend({}, origAsyncDirective, {
-            controller: null, templateUrl: null, transclude: null, scope: null, replace: null
+            templateUrl: null, transclude: null, replace: null
           }),
           templateUrl = (isFunction(origAsyncDirective.templateUrl))
               ? origAsyncDirective.templateUrl($compileNode, tAttrs)
@@ -1213,7 +1246,8 @@ function $CompileProvider($provide) {
 
           directives.unshift(derivedSyncDirective);
 
-          afterTemplateNodeLinkFn = applyDirectivesToNode(directives, compileNode, tAttrs, childTranscludeFn, $compileNode, origAsyncDirective);
+          afterTemplateNodeLinkFn = applyDirectivesToNode(directives, compileNode, tAttrs,
+              childTranscludeFn, $compileNode, origAsyncDirective, preLinkFns, postLinkFns, previousCompileContext);
           forEach($rootElement, function(node, i) {
             if (node == compileNode) {
               $rootElement[i] = $compileNode[0];
@@ -1235,10 +1269,7 @@ function $CompileProvider($provide) {
               replaceWith(linkRootElement, jqLite(beforeTemplateLinkNode), linkNode);
             }
 
-            afterTemplateNodeLinkFn(
-              beforeTemplateNodeLinkFn(afterTemplateChildLinkFn, scope, linkNode, $rootElement, controller),
-              scope, linkNode, $rootElement, controller
-            );
+            afterTemplateNodeLinkFn(afterTemplateChildLinkFn, scope, linkNode, $rootElement, controller);
           }
           linkQueue = null;
         }).
@@ -1253,9 +1284,7 @@ function $CompileProvider($provide) {
           linkQueue.push(rootElement);
           linkQueue.push(controller);
         } else {
-          afterTemplateNodeLinkFn(function() {
-            beforeTemplateNodeLinkFn(afterTemplateChildLinkFn, scope, node, rootElement, controller);
-          }, scope, node, rootElement, controller);
+          afterTemplateNodeLinkFn(afterTemplateChildLinkFn, scope, node, rootElement, controller);
         }
       };
     }
@@ -1265,7 +1294,10 @@ function $CompileProvider($provide) {
      * Sorting function for bound directives.
      */
     function byPriority(a, b) {
-      return b.priority - a.priority;
+      var diff = b.priority - a.priority;
+      if (diff !== 0) return diff;
+      if (a.name !== b.name) return (a.name < b.name) ? -1 : 1;
+      return a.index - b.index;
     }
 
 
@@ -1319,7 +1351,7 @@ function $CompileProvider($provide) {
       }
 
       directives.push({
-        priority: 100,
+        priority: -100,
         compile: valueFn(function attrInterpolateLinkFn(scope, element, attr) {
           var $$observers = (attr.$$observers || (attr.$$observers = {}));
 
@@ -1337,6 +1369,7 @@ function $CompileProvider($provide) {
           // register any observers
           if (!interpolateFn) return;
 
+          // TODO(i): this should likely be attr.$set(name, iterpolateFn(scope) so that we reset the actual attr value
           attr[name] = interpolateFn(scope);
           ($$observers[name] || ($$observers[name] = [])).$$inter = true;
           (attr.$$observers && attr.$$observers[name].$$scope || scope).

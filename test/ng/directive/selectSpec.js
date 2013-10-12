@@ -1213,6 +1213,31 @@ describe('select', function() {
         });
         expect(element).toBeValid();
       });
+
+
+      it('should allow falsy values as values', function() {
+        createSelect({
+          'ng-model': 'value',
+          'ng-options': 'item.value as item.name for item in values',
+          'ng-required': 'required'
+        }, true);
+
+        scope.$apply(function() {
+          scope.values = [{name: 'True', value: true}, {name: 'False', value: false}];
+          scope.required = false;
+        });
+
+        element.val('1');
+        browserTrigger(element, 'change');
+        expect(element).toBeValid();
+        expect(scope.value).toBe(false);
+
+        scope.$apply(function() {
+          scope.required = true;
+        });
+        expect(element).toBeValid();
+        expect(scope.value).toBe(false);
+      });
     });
   });
 
@@ -1247,5 +1272,15 @@ describe('select', function() {
       expect(element.find('span').text()).toBe('success');
       dealoc(element);
     }));
+
+    it('should throw an exception if an option value interpolates to "hasOwnProperty"', function() {
+      scope.hasOwnPropertyOption = "hasOwnProperty";
+      expect(function() {
+        compile('<select ng-model="x">'+
+                  '<option>{{hasOwnPropertyOption}}</option>'+
+                '</select>');
+      }).toThrowMinErr('ng','badname', 'hasOwnProperty is not a valid "option value" name');
+    });
+
   });
 });

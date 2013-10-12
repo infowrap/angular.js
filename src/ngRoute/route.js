@@ -28,6 +28,10 @@ var ngRouteModule = angular.module('ngRoute', ['ng']).
  * Requires the {@link ngRoute `ngRoute`} module to be installed.
  */
 function $RouteProvider(){
+  function inherit(parent, extra) {
+    return angular.extend(new (angular.extend(function() {}, {prototype:parent}))(), extra);
+  }
+
   var routes = {};
 
   /**
@@ -109,8 +113,8 @@ function $RouteProvider(){
    *      The custom `redirectTo` function is expected to return a string which will be used
    *      to update `$location.path()` and `$location.search()`.
    *
-   *    - `[reloadOnSearch=true]` - {boolean=} - reload route when only $location.search()
-   *    changes.
+   *    - `[reloadOnSearch=true]` - {boolean=} - reload route when only `$location.search()`
+   *      or `$location.hash()` changes.
    *
    *      If the option is set to `false` and url in the browser changes, then
    *      `$routeUpdate` event is broadcasted on the root scope.
@@ -126,7 +130,7 @@ function $RouteProvider(){
    * Adds a new route definition to the `$route` service.
    */
   this.when = function(path, route) {
-    routes[path] = extend(
+    routes[path] = angular.extend(
       {reloadOnSearch: true},
       route,
       path && pathRegExp(path, route)
@@ -138,7 +142,7 @@ function $RouteProvider(){
             ? path.substr(0, path.length-1)
             : path +'/';
 
-      routes[redirectPath] = extend(
+      routes[redirectPath] = angular.extend(
         {redirectTo: path},
         pathRegExp(redirectPath, route)
       );
@@ -177,7 +181,9 @@ function $RouteProvider(){
           + (optional ? '' : slash)
           + '(?:'
           + (optional ? slash : '')
-          + (star && '(.+)?' || '([^/]+)?') + ')'
+          + (star && '(.+?)' || '([^/]+)')
+          + (optional || '')
+          + ')'
           + (optional || '');
       })
       .replace(/([\/$\*])/g, '\\$1');
@@ -346,6 +352,7 @@ function $RouteProvider(){
      * defined in `resolve` route property. Once  all of the dependencies are resolved
      * `$routeChangeSuccess` is fired.
      *
+     * @param {Object} angularEvent Synthetic event object.
      * @param {Route} next Future route information.
      * @param {Route} current Current route information.
      */
@@ -457,9 +464,9 @@ function $RouteProvider(){
           last = $route.current;
 
       if (next && last && next.$$route === last.$$route
-          && equals(next.pathParams, last.pathParams) && !next.reloadOnSearch && !forceReload) {
+          && angular.equals(next.pathParams, last.pathParams) && !next.reloadOnSearch && !forceReload) {
         last.params = next.params;
-        copy(last.params, $routeParams);
+        angular.copy(last.params, $routeParams);
         $rootScope.$broadcast('$routeUpdate', last);
       } else if (next || last) {
         forceReload = false;
@@ -467,7 +474,7 @@ function $RouteProvider(){
         $route.current = next;
         if (next) {
           if (next.redirectTo) {
-            if (isString(next.redirectTo)) {
+            if (angular.isString(next.redirectTo)) {
               $location.path(interpolate(next.redirectTo, next.params)).search(next.params)
                        .replace();
             } else {
@@ -480,29 +487,29 @@ function $RouteProvider(){
         $q.when(next).
           then(function() {
             if (next) {
-              var locals = extend({}, next.resolve),
+              var locals = angular.extend({}, next.resolve),
                   template, templateUrl;
 
-              forEach(locals, function(value, key) {
-                locals[key] = isString(value) ? $injector.get(value) : $injector.invoke(value);
+              angular.forEach(locals, function(value, key) {
+                locals[key] = angular.isString(value) ? $injector.get(value) : $injector.invoke(value);
               });
 
-              if (isDefined(template = next.template)) {
-                if (isFunction(template)) {
+              if (angular.isDefined(template = next.template)) {
+                if (angular.isFunction(template)) {
                   template = template(next.params);
                 }
-              } else if (isDefined(templateUrl = next.templateUrl)) {
-                if (isFunction(templateUrl)) {
+              } else if (angular.isDefined(templateUrl = next.templateUrl)) {
+                if (angular.isFunction(templateUrl)) {
                   templateUrl = templateUrl(next.params);
                 }
                 templateUrl = $sce.getTrustedResourceUrl(templateUrl);
-                if (isDefined(templateUrl)) {
+                if (angular.isDefined(templateUrl)) {
                   next.loadedTemplateUrl = templateUrl;
                   template = $http.get(templateUrl, {cache: $templateCache}).
                       then(function(response) { return response.data; });
                 }
               }
-              if (isDefined(template)) {
+              if (angular.isDefined(template)) {
                 locals['$template'] = template;
               }
               return $q.all(locals);
@@ -513,7 +520,7 @@ function $RouteProvider(){
             if (next == $route.current) {
               if (next) {
                 next.locals = locals;
-                copy(next.params, $routeParams);
+                angular.copy(next.params, $routeParams);
               }
               $rootScope.$broadcast('$routeChangeSuccess', next, last);
             }
@@ -532,10 +539,10 @@ function $RouteProvider(){
     function parseRoute() {
       // Match a route
       var params, match;
-      forEach(routes, function(route, path) {
+      angular.forEach(routes, function(route, path) {
         if (!match && (params = switchRouteMatcher($location.path(), route))) {
           match = inherit(route, {
-            params: extend({}, $location.search(), params),
+            params: angular.extend({}, $location.search(), params),
             pathParams: params});
           match.$$route = route;
         }
@@ -549,7 +556,7 @@ function $RouteProvider(){
      */
     function interpolate(string, params) {
       var result = [];
-      forEach((string||'').split(':'), function(segment, i) {
+      angular.forEach((string||'').split(':'), function(segment, i) {
         if (i === 0) {
           result.push(segment);
         } else {

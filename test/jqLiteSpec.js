@@ -493,6 +493,16 @@ describe('jqLite', function() {
     });
 
 
+    it('should ignore comment elements', function() {
+      var comment = jqLite(document.createComment('something'));
+
+      comment.addClass('whatever');
+      comment.hasClass('whatever');
+      comment.toggleClass('whatever');
+      comment.removeClass('whatever');
+    });
+
+
     describe('hasClass', function() {
       it('should check class', function() {
         var selector = jqLite([a, b]);
@@ -1343,6 +1353,18 @@ describe('jqLite', function() {
       event = pokeSpy.mostRecentCall.args[0];
       expect(event.preventDefault).toBeDefined();
     });
+
+    it('should pass data as an additional argument', function() {
+      var element = jqLite('<a>poke</a>'),
+          pokeSpy = jasmine.createSpy('poke'),
+          data;
+
+      element.on('click', pokeSpy);
+
+      element.triggerHandler('click', [{hello: "world"}]);
+      data = pokeSpy.mostRecentCall.args[1];
+      expect(data.hello).toBe("world");
+    });
   });
 
 
@@ -1366,6 +1388,7 @@ describe('jqLite', function() {
      expect(camelCase('-moz-foo-bar')).toBe('MozFooBar');
      expect(camelCase('-webkit-foo-bar')).toBe('webkitFooBar');
      expect(camelCase('-webkit-foo-bar')).toBe('webkitFooBar');
-   })
+   });
   });
+
 });

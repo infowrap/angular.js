@@ -3,16 +3,6 @@
 ////////////////////////////////////
 
 /**
- * hasOwnProperty may be overwritten by a property of the same name, or entirely
- * absent from an object that does not inherit Object.prototype; this copy is
- * used instead
- */
-var hasOwnPropertyFn = Object.prototype.hasOwnProperty;
-var hasOwnPropertyLocal = function(obj, key) {
-  return hasOwnPropertyFn.call(obj, key);
-};
-
-/**
  * @ngdoc function
  * @name angular.lowercase
  * @function
@@ -87,22 +77,21 @@ if (isNaN(msie)) {
 /**
  * @private
  * @param {*} obj
- * @return {boolean} Returns true if `obj` is an array or array-like object (NodeList, Arguments, ...)
+ * @return {boolean} Returns true if `obj` is an array or array-like object (NodeList, Arguments, String ...)
  */
 function isArrayLike(obj) {
   if (obj == null || isWindow(obj)) {
     return false;
   }
-  
+
   var length = obj.length;
 
   if (obj.nodeType === 1 && length) {
     return true;
   }
 
-  return isArray(obj) || !isFunction(obj) && (
-    length === 0 || typeof length === "number" && length > 0 && (length - 1) in obj
-  );
+  return isString(obj) || isArray(obj) || length === 0 ||
+         typeof length === 'number' && length > 0 && (length - 1) in obj;
 }
 
 /**
@@ -599,7 +588,7 @@ function isLeafNode (node) {
  * * If a destination is provided, all of its elements (for array) or properties (for objects)
  *   are deleted and then all elements/properties from the source are copied to it.
  * * If `source` is not an object or array (inc. `null` and `undefined`), `source` is returned.
- * * If `source` is identical to 'destination' an exception will be thrown. 
+ * * If `source` is identical to 'destination' an exception will be thrown.
  *
  * Note: this function is used to augment the Object type in Angular expressions. See
  * {@link ng.$filter} for more information about Angular arrays.
@@ -609,6 +598,42 @@ function isLeafNode (node) {
  * @param {(Object|Array)=} destination Destination into which the source is copied. If
  *     provided, must be of the same type as `source`.
  * @returns {*} The copy or updated `destination`, if `destination` was specified.
+ *
+ * @example
+ <doc:example>
+ <doc:source>
+ <div ng-controller="Controller">
+ <form novalidate class="simple-form">
+ Name: <input type="text" ng-model="user.name" /><br />
+ E-mail: <input type="email" ng-model="user.email" /><br />
+ Gender: <input type="radio" ng-model="user.gender" value="male" />male
+ <input type="radio" ng-model="user.gender" value="female" />female<br />
+ <button ng-click="reset()">RESET</button>
+ <button ng-click="update(user)">SAVE</button>
+ </form>
+ <pre>form = {{user | json}}</pre>
+ <pre>master = {{master | json}}</pre>
+ </div>
+
+ <script>
+ function Controller($scope) {
+    $scope.master= {};
+
+    $scope.update = function(user) {
+      // Example with 1 argument
+      $scope.master= angular.copy(user);
+    };
+
+    $scope.reset = function() {
+      // Example with 2 arguments
+      angular.copy($scope.master, $scope.user);
+    };
+
+    $scope.reset();
+  }
+ </script>
+ </doc:source>
+ </doc:example>
  */
 function copy(source, destination){
   if (isWindow(source) || isScope(source)) {
@@ -656,6 +681,8 @@ function shallowCopy(src, dst) {
   dst = dst || {};
 
   for(var key in src) {
+    // shallowCopy is only ever called by $compile nodeLinkFn, which has control over src
+    // so we don't need to worry hasOwnProperty here
     if (src.hasOwnProperty(key) && key.substr(0, 2) !== '$$') {
       dst[key] = src[key];
     }
@@ -678,7 +705,7 @@ function shallowCopy(src, dst) {
  *
  * * Both objects or values pass `===` comparison.
  * * Both objects or values are of the same type and all of their properties pass `===` comparison.
- * * Both values are NaN. (In JavasScript, NaN == NaN => false. But we consider two NaN as equal)
+ * * Both values are NaN. (In JavaScript, NaN == NaN => false. But we consider two NaN as equal)
  * * Both values represent the same regular expression (In JavasScript,
  *   /abc/ == /abc/ => false. But we consider two regular expressions as equal when their textual
  *   representation matches).
@@ -750,7 +777,8 @@ function sliceArgs(args, startIndex) {
  * @description
  * Returns a function which calls function `fn` bound to `self` (`self` becomes the `this` for
  * `fn`). You can supply optional `args` that are prebound to the function. This feature is also
- * known as [function currying](http://en.wikipedia.org/wiki/Currying).
+ * known as [partial application](http://en.wikipedia.org/wiki/Partial_application), as distinguished
+ * from [function currying](http://en.wikipedia.org/wiki/Currying#Contrast_with_partial_function_application).
  *
  * @param {Object} self Context which `fn` should be evaluated in.
  * @param {function()} fn Function to be bound.
@@ -1149,6 +1177,17 @@ function assertArgFn(arg, name, acceptArrayAnnotation) {
   assertArg(isFunction(arg), name, 'not a function, got ' +
       (arg && typeof arg == 'object' ? arg.constructor.name || 'Object' : typeof arg));
   return arg;
+}
+
+/**
+ * throw error if the name given is hasOwnProperty
+ * @param  {String} name    the name to test
+ * @param  {String} context the context in which the name is used, such as module or directive
+ */
+function assertNotHasOwnProperty(name, context) {
+  if (name === 'hasOwnProperty') {
+    throw ngMinErr('badname', "hasOwnProperty is not a valid {0} name", context);
+  }
 }
 
 /**
