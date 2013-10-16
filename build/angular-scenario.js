@@ -9790,7 +9790,7 @@ if ( typeof module === "object" && module && typeof module.exports === "object" 
 })( window );
 
 /**
- * @license AngularJS v1.2.0-771d6a5
+ * @license AngularJS v1.2.0-084816c
  * (c) 2010-2012 Google, Inc. http://angularjs.org
  * License: MIT
  */
@@ -11393,11 +11393,11 @@ function setupModuleLoader(window) {
  * - `codeName` – `{string}` – Code name of the release, such as "jiggling-armfat".
  */
 var version = {
-  full: '1.2.0-771d6a5',    // all of these placeholder strings will be replaced by grunt's
+  full: '1.2.0-084816c',    // all of these placeholder strings will be replaced by grunt's
   major: 1,    // package task
   minor: 2,
   dot: 0,
-  codeName: 'ferocious-twitch'
+  codeName: ''
 };
 
 
@@ -18852,6 +18852,7 @@ Parser.prototype = {
       }
       var fnPtr = fn(scope, locals, context) || noop;
 
+      ensureSafeObject(context, parser.text);
       ensureSafeObject(fnPtr, parser.text);
 
       // IE stupidity! (IE doesn't have apply for some native functions)
@@ -19862,10 +19863,14 @@ function qFactory(nextTick, exceptionHandler) {
  * @methodOf ng.$rootScopeProvider
  * @description
  *
- * Sets the number of digest iterations the scope should attempt to execute before giving up and
- * assuming that the model is unstable.
+ * Sets the number of `$digest` iterations the scope should attempt to execute before giving up and assuming that the model is unstable.
  *
  * The current default is 10 iterations.
+ *
+ * In complex applications it's possible that the dependencies between `$watch`s will result in several digest iterations.
+ * However if an application needs more than the default 10 digest iterations for its model to stabilize then you should investigate what is causing the model to continuously change during the digest.
+ *
+ * Increasing the TTL could have performance implications, so you should not change it without proper justification.
  *
  * @param {number} limit The number of digest iterations.
  */
@@ -26637,6 +26642,7 @@ forEach(
  *
  * @element ANY
  * @scope
+ * @priority 600
  * @param {expression} ngIf If the {@link guide/expression expression} is falsy then
  *     the element is removed from the DOM tree. If it is truthy a copy of the compiled
  *     eleent is added to the DOM tree.
@@ -26736,6 +26742,7 @@ var ngIfDirective = ['$animate', function($animate) {
  * The enter and leave animation occur concurrently.
  *
  * @scope
+ * @priority 400
  *
  * @param {string} ngInclude|src angular expression evaluating to URL. If the source is a string constant,
  *                 make sure you wrap it in quotes, e.g. `src="'myPartialTemplate.html'"`.
@@ -28017,6 +28024,7 @@ var ngStyleDirective = ngDirective(function(scope, element, attr) {
  * </ANY>
  *
  * @scope
+ * @priority 800
  * @param {*} ngSwitch|on expression to match against <tt>ng-switch-when</tt>.
  * @paramDescription
  * On child elements add:
