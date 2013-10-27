@@ -21,7 +21,7 @@ function $IntervalProvider() {
       * number of iterations that have run.
       * To cancel an interval, call `$interval.cancel(promise)`.
       *
-      * In tests you can use {@link ngMock.$interval#flush `$interval.flush(millis)`} to
+      * In tests you can use {@link ngMock.$interval#methods_flush `$interval.flush(millis)`} to
       * move forward by `millis` milliseconds and trigger any functions scheduled to run in that
       * time.
       *
@@ -30,18 +30,18 @@ function $IntervalProvider() {
       * @param {number=} [count=0] Number of times to repeat. If not set, or 0, will repeat
       *   indefinitely.
       * @param {boolean=} [invokeApply=true] If set to `false` skips model dirty checking, otherwise
-      *   will invoke `fn` within the {@link ng.$rootScope.Scope#$apply $apply} block.
+      *   will invoke `fn` within the {@link ng.$rootScope.Scope#methods_$apply $apply} block.
       * @returns {promise} A promise which will be notified on each iteration.
       */
     function interval(fn, delay, count, invokeApply) {
       var setInterval = $window.setInterval,
-          clearInterval = $window.clearInterval;
-
-      var deferred = $q.defer(),
+          clearInterval = $window.clearInterval,
+          deferred = $q.defer(),
           promise = deferred.promise,
-          count = (isDefined(count)) ? count : 0,
           iteration = 0,
           skipApply = (isDefined(invokeApply) && !invokeApply);
+      
+      count = isDefined(count) ? count : 0,
 
       promise.then(null, null, fn);
 

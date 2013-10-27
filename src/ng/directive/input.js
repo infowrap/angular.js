@@ -1,5 +1,13 @@
 'use strict';
 
+/* global
+
+    -VALID_CLASS,
+    -INVALID_CLASS,
+    -PRISTINE_CLASS,
+    -DIRTY_CLASS
+*/
+
 var URL_REGEXP = /^(ftp|http|https):\/\/(\w+:{0,1}\w*@)?(\S+)(:[0-9]+)?(\/|\/([\w#!:.?+=&%@!\-\/]))?$/;
 var EMAIL_REGEXP = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,6}$/;
 var NUMBER_REGEXP = /^\s*(\-|\+)?(\d+|(\d*(\.\d*)))\s*$/;
@@ -536,8 +544,8 @@ function numberInputType(scope, element, attr, ctrl, $sniffer, $browser) {
   });
 
   if (attr.min) {
-    var min = parseFloat(attr.min);
     var minValidator = function(value) {
+      var min = parseFloat(attr.min);
       if (!ctrl.$isEmpty(value) && value < min) {
         ctrl.$setValidity('min', false);
         return undefined;
@@ -552,8 +560,8 @@ function numberInputType(scope, element, attr, ctrl, $sniffer, $browser) {
   }
 
   if (attr.max) {
-    var max = parseFloat(attr.max);
     var maxValidator = function(value) {
+      var max = parseFloat(attr.max);
       if (!ctrl.$isEmpty(value) && value > max) {
         ctrl.$setValidity('max', false);
         return undefined;
@@ -818,7 +826,7 @@ var VALID_CLASS = 'ng-valid',
        the control reads value from the DOM.  Each function is called, in turn, passing the value
        through to the next. Used to sanitize / convert the value as well as validation.
        For validation, the parsers should update the validity state using
-       {@link ng.directive:ngModel.NgModelController#$setValidity $setValidity()},
+       {@link ng.directive:ngModel.NgModelController#methods_$setValidity $setValidity()},
        and return `undefined` for invalid values.
 
  *
@@ -931,30 +939,31 @@ var VALID_CLASS = 'ng-valid',
  * Note that if you have a directive with an isolated scope, you cannot require `ngModel`
  * since the model value will be looked up on the isolated scope rather than the outer scope.
  * When the directive updates the model value, calling `ngModel.$setViewValue()` the property
- * on the outer scope will not be updated.
+ * on the outer scope will not be updated. However you can get around this by using $parent.
  *
- * Here is an example of this situation.  You'll notice that even though both 'input' and 'div'
- * seem to be attached to the same model, they are not kept in synch.
+ * Here is an example of this situation.  You'll notice that the first div is not updating the input. 
+ * However the second div can update the input properly.
  *
  * <example module="badIsolatedDirective">
     <file name="script.js">
-		angular.module('badIsolatedDirective', []).directive('bad', function() {
-		  return {
-		    require: 'ngModel',
-		    scope: { },
-		    template: '<input ng-model="innerModel">',
-		    link: function(scope, element, attrs, ngModel) {
-		      scope.$watch('innerModel', function(value) {
-		        console.log(value);
-		        ngModel.$setViewValue(value);
-		      });
-		    }
-		  };
+		angular.module('badIsolatedDirective', []).directive('isolate', function() {
+      return {
+        require: 'ngModel',
+        scope: { },
+        template: '<input ng-model="innerModel">',
+        link: function(scope, element, attrs, ngModel) {
+          scope.$watch('innerModel', function(value) {
+            console.log(value);
+            ngModel.$setViewValue(value);
+          });
+        }
+      };
 		});
     </file>
     <file name="index.html">
-	    <input ng-model="someModel">
-	    <div bad ng-model="someModel"></div>
+        <input ng-model="someModel"/>
+        <div isolate ng-model="someModel"></div>
+        <div isolate ng-model="$parent.someModel"></div>
     </file>
  * </example>
  *
@@ -999,10 +1008,10 @@ var NgModelController = ['$scope', '$exceptionHandler', '$attrs', '$element', '$
    *
    * @description
    * This is called when we need to determine if the value of the input is empty.
-   * 
+   *
    * For instance, the required directive does this to work out if the input has data or not.
    * The default `$isEmpty` function checks whether the value is `undefined`, `''`, `null` or `NaN`.
-   * 
+   *
    * You can override this for input directives whose concept of being empty is different to the
    * default. The `checkboxInputType` directive does this because in its case a value of `false`
    * implies empty.
@@ -1047,7 +1056,10 @@ var NgModelController = ['$scope', '$exceptionHandler', '$attrs', '$element', '$
    * @param {boolean} isValid Whether the current state is valid (true) or invalid (false).
    */
   this.$setValidity = function(validationErrorKey, isValid) {
+    // Purposeful use of ! here to cast isValid to boolean in case it is undefined
+    // jshint -W018
     if ($error[validationErrorKey] === !isValid) return;
+    // jshint +W018
 
     if (isValid) {
       if ($error[validationErrorKey]) invalidCount--;
@@ -1127,7 +1139,7 @@ var NgModelController = ['$scope', '$exceptionHandler', '$attrs', '$element', '$
         } catch(e) {
           $exceptionHandler(e);
         }
-      })
+      });
     }
   };
 

@@ -74,7 +74,7 @@ describe('injector', function() {
   });
 
 
-  it('should proved path to the missing provider', function() {
+  it('should provide path to the missing provider', function() {
     providers('a', function(idontexist) {return 1;});
     providers('b', function(a) {return 2;});
     expect(function() {
@@ -785,6 +785,16 @@ describe('injector', function() {
       };
 
       expect($injector.instantiate(Class)).toBe(obj);
+    });
+
+
+    it('should allow constructor to return a function', function() {
+      var fn = function() {};
+      var Class = function() {
+        return fn;
+      };
+
+      expect($injector.instantiate(Class)).toBe(fn);
     });
 
 

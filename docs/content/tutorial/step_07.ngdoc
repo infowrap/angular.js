@@ -107,7 +107,7 @@ module `phonecatControllers`. By listing these two modules as dependencies of `p
 can use the directives and services they provide.
 
 Thus using the `config` API we request the `$routeProvider` to be injected into our config function
-and use the {@link api/ngRoute.$routeProvider#when `$routeProvider.when`} API to define our routes.
+and use the {@link api/ngRoute.$routeProvider#methods_when `$routeProvider.when`} API to define our routes.
 
 Our application routes are defined as follows:
 
@@ -165,7 +165,7 @@ phonecatControllers.controller('PhoneDetailCtrl', ['$scope', '$routeParams',
 
 Again, note that we created a new module called `phonecatControllers`. For small AngularJS applications,
 it's common to create just one module for all of your controllers if there are just a few. For larger apps,
-you will rpobbaly want to create separate modules for each major feature of your app.
+you will probably want to create separate modules for each major feature of your app.
 
 Because our example app is relatively small, we'll add all of our controllers to this module.
 
@@ -177,12 +177,13 @@ route into the layout template. This makes it a perfect fit for our `index.html`
 
 <div class="alert alert-info">
 **Note:** Starting with AngularJS version 1.2, `ngRoute` is in its own module and must be loaded by loading
-the `angular-route.js` file distributed with Angular. The easist way to load the file is to add a `<scipt>`
+the `angular-route.js` file distributed with Angular. The easist way to load the file is to add a `<script>`
 tag to your `index.html` file as shown below.
 </div>
 
 __`app/index.html`:__
 <pre>
+<!doctype html>
 <html lang="en" ng-app="phonecatApp">
 <head>
 ...

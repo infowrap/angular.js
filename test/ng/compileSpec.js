@@ -1591,7 +1591,7 @@ describe('$compile', function() {
     );
 
 
-    it('should process attribute interpolation at the beginning of the post-linking phase', function() {
+    it('should process attribute interpolation in pre-linking phase at priority 100', function() {
       module(function() {
         directive('attrLog', function(log) {
           return {
@@ -1600,22 +1600,36 @@ describe('$compile', function() {
 
               return {
                 pre: function($scope, $element, $attrs) {
-                  log('preLink=' + $attrs.myName);
+                  log('preLinkP0=' + $attrs.myName);
                 },
-                post: function($scope, $element) {
+                post: function($scope, $element, $attrs) {
                   log('postLink=' + $attrs.myName);
                 }
               }
             }
           }
-        })
+        });
+      });
+      module(function() {
+        directive('attrLogHighPriority', function(log) {
+          return {
+            priority: 101,
+            compile: function() {
+              return {
+                pre: function($scope, $element, $attrs) {
+                  log('preLinkP101=' + $attrs.myName);
+                }
+              };
+            }
+          }
+        });
       });
       inject(function($rootScope, $compile, log) {
-        element = $compile('<div attr-log my-name="{{name}}"></div>')($rootScope);
+        element = $compile('<div attr-log-high-priority attr-log my-name="{{name}}"></div>')($rootScope);
         $rootScope.name = 'angular';
         $rootScope.$apply();
         log('digest=' + element.attr('my-name'));
-        expect(log).toEqual('compile={{name}}; preLink={{name}}; postLink=; digest=angular');
+        expect(log).toEqual('compile={{name}}; preLinkP101={{name}}; preLinkP0=; postLink=; digest=angular');
       });
     });
 
@@ -1758,6 +1772,32 @@ describe('$compile', function() {
         expect(element.text()).toBe('AHOJ|ahoj|AHOJ');
       });
     });
+
+
+    it('should make attributes observable for terminal directives', function() {
+      module(function() {
+        directive('myAttr', function(log) {
+          return {
+            terminal: true,
+            link: function(scope, element, attrs) {
+              attrs.$observe('myAttr', function(val) {
+                log(val);
+              });
+            }
+          }
+        });
+      });
+
+      inject(function($compile, $rootScope, log) {
+        element = $compile('<div my-attr="{{myVal}}"></div>')($rootScope);
+        expect(log).toEqual([]);
+
+        $rootScope.myVal = 'carrot';
+        $rootScope.$digest();
+
+        expect(log).toEqual(['carrot']);
+      });
+    })
   });
 
 
@@ -2278,6 +2318,60 @@ describe('$compile', function() {
       inject(function(log, $compile, $rootScope) {
         element = $compile('<div main dep other></div>')($rootScope);
         expect(log).toEqual('false; dep:main; main');
+      });
+    });
+
+
+    it('should get required controller via linkingFn (template)', function() {
+      module(function() {
+        directive('dirA', function() {
+          return {
+            controller: function() {
+              this.name = 'dirA';
+            }
+          };
+        });
+        directive('dirB', function(log) {
+          return {
+            require: 'dirA',
+            template: '<p>dirB</p>',
+            link: function(scope, element, attrs, dirAController) {
+              log('dirAController.name: ' + dirAController.name);
+            }
+          };
+        });
+      });
+      inject(function(log, $compile, $rootScope) {
+        element = $compile('<div dir-a dir-b></div>')($rootScope);
+        expect(log).toEqual('dirAController.name: dirA');
+      });
+    });
+
+
+    it('should get required controller via linkingFn (templateUrl)', function() {
+      module(function() {
+        directive('dirA', function() {
+          return {
+            controller: function() {
+              this.name = 'dirA';
+            }
+          };
+        });
+        directive('dirB', function(log) {
+          return {
+            require: 'dirA',
+            templateUrl: 'dirB.html',
+            link: function(scope, element, attrs, dirAController) {
+              log('dirAController.name: ' + dirAController.name);
+            }
+          };
+        });
+      });
+      inject(function(log, $compile, $rootScope, $templateCache) {
+        $templateCache.put('dirB.html', '<p>dirB</p>');
+        element = $compile('<div dir-a dir-b></div>')($rootScope);
+        $rootScope.$digest();
+        expect(log).toEqual('dirAController.name: dirA');
       });
     });
 

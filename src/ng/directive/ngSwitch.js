@@ -31,6 +31,7 @@
  * </ANY>
  *
  * @scope
+ * @priority 800
  * @param {*} ngSwitch|on expression to match against <tt>ng-switch-when</tt>.
  * @paramDescription
  * On child elements add:
@@ -160,7 +161,7 @@ var ngSwitchDirective = ['$animate', function($animate) {
         }
       });
     }
-  }
+  };
 }];
 
 var ngSwitchWhenDirective = ngDirective({

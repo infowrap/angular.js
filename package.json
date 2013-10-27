@@ -1,8 +1,8 @@
 {
   "name": "angularjs",
   "version": "1.2.0-snapshot",
-  "cdnVersion": "1.2.0-rc.2",
-  "codename": "ferocious-twitch",
+  "cdnVersion": "1.2.0-rc.3",
+  "codename": "",
   "repository": {
     "type": "git",
     "url": "https://github.com/angular/angular.js.git"
@@ -44,5 +44,8 @@
       "type": "MIT",
       "url": "https://github.com/angular/angular.js/blob/master/LICENSE"
     }
-  ]
+  ],
+  "dependencies": {
+    "grunt-contrib-jshint": "~0.6.4"
+  }
 }
