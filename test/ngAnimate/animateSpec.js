@@ -96,6 +96,11 @@ describe("ngAnimate", function() {
 
           $animate.addClass(elm2, 'klass2');
           expect(count).toBe(2);
+
+          var root = angular.element($rootElement[0]);
+          $rootElement.addClass('animated');
+          $animate.addClass(root, 'klass2');
+          expect(count).toBe(3);
         });
       });
 
@@ -118,6 +123,46 @@ describe("ngAnimate", function() {
 
           $animate.addClass(elm1, 'klass2');
           expect(count).toBe(0);
+        });
+      });
+
+      it('should check enable/disable animations up until the $rootElement element', function() {
+        var rootElm = jqLite('<div></div>');
+
+        var captured = false;
+        module(function($provide, $animateProvider) {
+          $provide.value('$rootElement', rootElm);
+          $animateProvider.register('.ani', function() {
+            return {
+              addClass : function(element, className, done) {
+                captured = true;
+                done();
+              }
+            }
+          });
+        });
+        inject(function($animate, $rootElement, $rootScope, $compile, $timeout) {
+          var initialState;
+          angular.bootstrap(rootElm, ['ngAnimate']);
+
+          $animate.enabled(true);
+
+          var element = $compile('<div class="ani"></div>')($rootScope);
+          rootElm.append(element);
+
+          expect(captured).toBe(false);
+          $animate.addClass(element, 'red');
+          expect(captured).toBe(true);
+
+          captured = false;
+          $animate.enabled(false);
+
+          $animate.addClass(element, 'blue');
+          expect(captured).toBe(false);
+
+          //clean up the mess
+          $animate.enabled(false, rootElm);
+          dealoc(rootElm);
         });
       });
     });
@@ -642,6 +687,66 @@ describe("ngAnimate", function() {
 
             expect(element.hasClass('ng-hide-remove-active')).toBe(false);
         }));
+
+        it("should stagger the items when the correct CSS class is provided",
+          inject(function($animate, $rootScope, $compile, $sniffer, $timeout, $document, $rootElement) {
+
+          if(!$sniffer.animations) return;
+
+          $animate.enabled(true);
+
+          ss.addRule('.ani.ng-enter, .ani.ng-leave, .ani-fake.ng-enter, .ani-fake.ng-leave',
+            '-webkit-animation:1s my_animation;' + 
+            'transition:1s my_animation;');
+
+          ss.addRule('.ani.ng-enter-stagger, .ani.ng-leave-stagger',
+            '-webkit-animation-delay:0.1s;' +
+            '-webkit-animation-duration:0s;' +
+            'animation-delay:0.1s;' + 
+            'animation-duration:0s;');
+
+          ss.addRule('.ani-fake.ng-enter-stagger, .ani-fake.ng-leave-stagger',
+            '-webkit-animation-delay:0.1s;' +
+            '-webkit-animation-duration:1s;' +
+            'animation-delay:0.1s;' + 
+            'animation-duration:1s;');
+
+          var container = $compile(html('<div></div>'))($rootScope);
+
+          var elements = [];
+          for(var i = 0; i < 5; i++) {
+            var newScope = $rootScope.$new();
+            var element = $compile('<div class="ani"></div>')(newScope);
+            $animate.enter(element, container);
+            elements.push(element);
+          };
+
+          $rootScope.$digest();
+          $timeout.flush();
+
+          expect(elements[0].attr('style')).toBeFalsy();
+          expect(elements[1].attr('style')).toMatch(/animation-delay: 0\.1\d*s/);
+          expect(elements[2].attr('style')).toMatch(/animation-delay: 0\.2\d*s/);
+          expect(elements[3].attr('style')).toMatch(/animation-delay: 0\.3\d*s/);
+          expect(elements[4].attr('style')).toMatch(/animation-delay: 0\.4\d*s/);
+
+          for(var i = 0; i < 5; i++) {
+            dealoc(elements[i]);
+            var newScope = $rootScope.$new();
+            var element = $compile('<div class="ani-fake"></div>')(newScope);
+            $animate.enter(element, container);
+            elements[i] = element;
+          };
+
+          $rootScope.$digest();
+          $timeout.flush();
+
+          expect(elements[0].attr('style')).toBeFalsy();
+          expect(elements[1].attr('style')).not.toMatch(/animation-delay: 0\.1\d*s/);
+          expect(elements[2].attr('style')).not.toMatch(/animation-delay: 0\.2\d*s/);
+          expect(elements[3].attr('style')).not.toMatch(/animation-delay: 0\.3\d*s/);
+          expect(elements[4].attr('style')).not.toMatch(/animation-delay: 0\.4\d*s/);
+        }));
       });
 
       describe("Transitions", function() {
@@ -784,6 +889,66 @@ describe("ngAnimate", function() {
               expect(element.hasClass('ng-hide-add')).toBe(true);
               expect(element.hasClass('ng-hide-add-active')).toBe(true);
             }
+        }));
+
+        it("should stagger the items when the correct CSS class is provided",
+          inject(function($animate, $rootScope, $compile, $sniffer, $timeout, $document, $rootElement) {
+
+          if(!$sniffer.transitions) return;
+
+          $animate.enabled(true);
+
+          ss.addRule('.ani.ng-enter, .ani.ng-leave, .ani-fake.ng-enter, .ani-fake.ng-leave',
+            '-webkit-transition:1s linear all;' + 
+            'transition:1s linear all;');
+
+          ss.addRule('.ani.ng-enter-stagger, .ani.ng-leave-stagger',
+            '-webkit-transition-delay:0.1s;' +
+            '-webkit-transition-duration:0s;' +
+            'transition-delay:0.1s;' + 
+            'transition-duration:0s;');
+
+          ss.addRule('.ani-fake.ng-enter-stagger, .ani-fake.ng-leave-stagger',
+            '-webkit-transition-delay:0.1s;' +
+            '-webkit-transition-duration:1s;' +
+            'transition-delay:0.1s;' + 
+            'transition-duration:1s;');
+
+          var container = $compile(html('<div></div>'))($rootScope);
+
+          var elements = [];
+          for(var i = 0; i < 5; i++) {
+            var newScope = $rootScope.$new();
+            var element = $compile('<div class="ani"></div>')(newScope);
+            $animate.enter(element, container);
+            elements.push(element);
+          };
+
+          $rootScope.$digest();
+          $timeout.flush();
+
+          expect(elements[0].attr('style')).toBeFalsy();
+          expect(elements[1].attr('style')).toMatch(/transition-delay: 0\.1\d*s/);
+          expect(elements[2].attr('style')).toMatch(/transition-delay: 0\.2\d*s/);
+          expect(elements[3].attr('style')).toMatch(/transition-delay: 0\.3\d*s/);
+          expect(elements[4].attr('style')).toMatch(/transition-delay: 0\.4\d*s/);
+
+          for(var i = 0; i < 5; i++) {
+            dealoc(elements[i]);
+            var newScope = $rootScope.$new();
+            var element = $compile('<div class="ani-fake"></div>')(newScope);
+            $animate.enter(element, container);
+            elements[i] = element;
+          };
+
+          $rootScope.$digest();
+          $timeout.flush();
+
+          expect(elements[0].attr('style')).toBeFalsy();
+          expect(elements[1].attr('style')).not.toMatch(/transition-delay: 0\.1\d*s/);
+          expect(elements[2].attr('style')).not.toMatch(/transition-delay: 0\.2\d*s/);
+          expect(elements[3].attr('style')).not.toMatch(/transition-delay: 0\.3\d*s/);
+          expect(elements[4].attr('style')).not.toMatch(/transition-delay: 0\.4\d*s/);
         }));
       });
     });
@@ -1657,6 +1822,42 @@ describe("ngAnimate", function() {
 //      expect(element.hasClass('hiding')).toBe(false);
 //    });
 //  });
+  it("should remove all the previous classes when the next animation is applied before a reflow", function() {
+    var fn, interceptedClass;
+    module(function($animateProvider) {
+      $animateProvider.register('.three', function() {
+        return {
+          move : function(element, done) {
+            fn = function() {
+              done();
+            }
+            return function() {
+              interceptedClass = element.attr('class');
+            }
+          }
+        }
+      });
+    });
+    inject(function($compile, $rootScope, $animate, $timeout) {
+      var parent = html($compile('<div class="parent"></div>')($rootScope));
+      var one = $compile('<div class="one"></div>')($rootScope);
+      var two = $compile('<div class="two"></div>')($rootScope);
+      var three = $compile('<div class="three klass"></div>')($rootScope);
+
+      parent.append(one);
+      parent.append(two);
+      parent.append(three);
+
+      $animate.move(three, null, two);
+      $rootScope.$digest();
+
+      $animate.move(three, null, one);
+      $rootScope.$digest();
+
+      //this means that the former animation was cleaned up before the new one starts
+      expect(interceptedClass.indexOf('ng-animate') >= 0).toBe(false);
+    });
+  });
 
   it("should provide the correct CSS class to the addClass and removeClass callbacks within a JS animation", function() {
     module(function($animateProvider) {
@@ -2008,7 +2209,8 @@ describe("ngAnimate", function() {
       $rootScope.$digest();
       $timeout.flush();
 
-      expect(count).toBe(2);
+      //called three times since the classname is the same
+      expect(count).toBe(3);
 
       dealoc(element);
       count = 0;
