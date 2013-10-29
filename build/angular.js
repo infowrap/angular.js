@@ -1,5 +1,5 @@
 /**
- * @license AngularJS v1.2.0-8112052
+ * @license AngularJS v1.2.0-76c7043
  * (c) 2010-2012 Google, Inc. http://angularjs.org
  * License: MIT
  */
@@ -1781,7 +1781,7 @@ function setupModuleLoader(window) {
  * - `codeName` – `{string}` – Code name of the release, such as "jiggling-armfat".
  */
 var version = {
-  full: '1.2.0-8112052',    // all of these placeholder strings will be replaced by grunt's
+  full: '1.2.0-76c7043',    // all of these placeholder strings will be replaced by grunt's
   major: 1,    // package task
   minor: "NG_VERSION_MINOR",
   dot: 0,
@@ -3114,7 +3114,7 @@ function annotate(fn) {
  *     providers and services.
  * * {@link AUTO.$provide#methods_value value(obj)} - registers a value/object that can only be accessed by
  *     services, not providers.
- * * {@link AUTO.$provide#factory factory(fn)} - registers a service **factory function**, `fn`,
+ * * {@link AUTO.$provide#methods_factory factory(fn)} - registers a service **factory function**, `fn`,
  *     that will be wrapped in a **service provider** object, whose `$get` property will contain the
  *     given factory function.
  * * {@link AUTO.$provide#methods_service service(class)} - registers a **constructor function**, `class` that
@@ -5739,9 +5739,13 @@ function $CompileProvider($provide) {
 
             childTranscludeFn = compile($template, transcludeFn, terminalPriority,
                                         replaceDirective && replaceDirective.name, {
-                                          controllerDirectives: controllerDirectives,
-                                          newIsolateScopeDirective: newIsolateScopeDirective,
-                                          templateDirective: templateDirective,
+                                          // Don't pass in:
+                                          // - controllerDirectives - otherwise we'll create duplicates controllers
+                                          // - newIsolateScopeDirective or templateDirective - combining templates with
+                                          //   element transclusion doesn't make sense.
+                                          //
+                                          // We need only transcludeDirective so that we prevent putting transclusion
+                                          // on the same element more than once.
                                           transcludeDirective: transcludeDirective
                                         });
           } else {
