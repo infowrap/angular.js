@@ -214,6 +214,7 @@ Doc.prototype = {
   },
 
   shortDescription : function() {
+    if (!this.description) return this.description;
     var text = this.description.split("\n")[0];
     text = text.replace(/<.+?\/?>/g, '');
     text = text.replace(/{/g,'&#123;');
@@ -1107,7 +1108,7 @@ function scenarios(docs){
 function metadata(docs){
   var pages = [];
   docs.forEach(function(doc){
-    var path = (doc.name || '').split(/(\.|\:\s*)/);
+    var path = (doc.name || '').split(/(\:\s*)/);
     for ( var i = 1; i < path.length; i++) {
       path.splice(i, 1);
     }
@@ -1125,10 +1126,10 @@ function metadata(docs){
       type: doc.ngdoc,
       moduleName: doc.moduleName,
       shortDescription: doc.shortDescription(),
-      keywords:doc.keywords()
+      keywords: doc.keywords()
     });
   });
-  pages.sort(keywordSort);
+  pages.sort(sidebarSort);
   return pages;
 }
 
@@ -1161,7 +1162,60 @@ var KEYWORD_PRIORITY = {
   '.dev_guide.di': 8,
   '.dev_guide.unit-testing': 9
 };
-function keywordSort(a, b){
+
+var GUIDE_PRIORITY = [
+  'introduction',
+  'overview',
+  'concepts',
+  'dev_guide.mvc',
+
+  'dev_guide.mvc.understanding_controller',
+  'dev_guide.mvc.understanding_model',
+  'dev_guide.mvc.understanding_view',
+
+  'dev_guide.services.understanding_services',
+  'dev_guide.services.managing_dependencies',
+  'dev_guide.services.creating_services',
+  'dev_guide.services.injecting_controllers',
+  'dev_guide.services.testing_services',
+  'dev_guide.services.$location',
+  'dev_guide.services',
+
+  'databinding',
+  'dev_guide.templates.css-styling',
+  'dev_guide.templates.filters.creating_filters',
+  'dev_guide.templates.filters',
+  'dev_guide.templates.filters.using_filters',
+  'dev_guide.templates',
+
+  'di',
+  'providers',
+  'module',
+  'scope',
+  'expression',
+  'bootstrap',
+  'directive',
+  'compiler',
+
+  'forms',
+  'animations',
+
+  'dev_guide.e2e-testing',
+  'dev_guide.unit-testing',
+
+  'i18n',
+  'ie',
+  'migration',
+];
+
+function sidebarSort(a, b){
+  priorityA = GUIDE_PRIORITY.indexOf(a.id);
+  priorityB = GUIDE_PRIORITY.indexOf(b.id);
+
+  if (priorityA > -1 || priorityB > -1) {
+    return priorityA < priorityB ? -1 : (priorityA > priorityB ? 1 : 0);
+  }
+
   function mangleName(doc) {
     var path = doc.id.split(/\./);
     var mangled = [];
@@ -1277,6 +1331,9 @@ function checkBrokenLinks(docs) {
 
   docs.forEach(function(doc) {
     byFullId[doc.section + '/' + doc.id] = doc;
+    if (doc.section === 'api') {
+      doc.anchors.push('directive', 'service', 'filter', 'function');
+    }
   });
 
   docs.forEach(function(doc) {

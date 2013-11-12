@@ -59,10 +59,11 @@
         padding:10px;
       }
 
+      /&#42;
+        The transition styles can also be placed on the CSS base class above
+      &#42;/
       .animate-if.ng-enter, .animate-if.ng-leave {
         -webkit-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
-        -moz-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
-        -o-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
         transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
       }
 
@@ -71,8 +72,8 @@
         opacity:0;
       }
 
-      .animate-if.ng-enter.ng-enter-active,
-      .animate-if.ng-leave {
+      .animate-if.ng-leave,
+      .animate-if.ng-enter.ng-enter-active {
         opacity:1;
       }
     </file>
@@ -84,24 +85,34 @@ var ngIfDirective = ['$animate', function($animate) {
     priority: 600,
     terminal: true,
     restrict: 'A',
+    $$tlb: true,
     compile: function (element, attr, transclude) {
       return function ($scope, $element, $attr) {
-        var childElement, childScope;
+        var block, childScope;
         $scope.$watch($attr.ngIf, function ngIfWatchAction(value) {
-          if (childElement) {
-            $animate.leave(childElement);
-            childElement = undefined;
-          }
-          if (childScope) {
-            childScope.$destroy();
-            childScope = undefined;
-          }
+
           if (toBoolean(value)) {
-            childScope = $scope.$new();
-            transclude(childScope, function (clone) {
-              childElement = clone;
-              $animate.enter(clone, $element.parent(), $element);
-            });
+            if (!childScope) {
+              childScope = $scope.$new();
+              transclude(childScope, function (clone) {
+                block = {
+                  startNode: clone[0],
+                  endNode: clone[clone.length++] = document.createComment(' end ngIf: ' + $attr.ngIf + ' ')
+                };
+                $animate.enter(clone, $element.parent(), $element);
+              });
+            }
+          } else {
+
+            if (childScope) {
+              childScope.$destroy();
+              childScope = null;
+            }
+
+            if (block) {
+              $animate.leave(getBlockElements(block));
+              block = null;
+            }
           }
         });
       };
