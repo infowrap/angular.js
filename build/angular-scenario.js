@@ -9790,7 +9790,7 @@ if ( typeof module === "object" && module && typeof module.exports === "object" 
 })( window );
 
 /**
- * @license AngularJS v1.2.0-76c7043
+ * @license AngularJS v1.2.1-2a5ca03
  * (c) 2010-2012 Google, Inc. http://angularjs.org
  * License: MIT
  */
@@ -9950,7 +9950,8 @@ function minErr(module) {
     -assertArg,
     -assertArgFn,
     -assertNotHasOwnProperty,
-    -getter
+    -getter,
+    -getBlockElements
 
 */
 
@@ -10547,9 +10548,6 @@ function isLeafNode (node) {
  * * If `source` is not an object or array (inc. `null` and `undefined`), `source` is returned.
  * * If `source` is identical to 'destination' an exception will be thrown.
  *
- * Note: this function is used to augment the Object type in Angular expressions. See
- * {@link ng.$filter} for more information about Angular arrays.
- *
  * @param {*} source The source that will be used to make a copy.
  *                   Can be any type, including primitives, `null`, and `undefined`.
  * @param {(Object|Array)=} destination Destination into which the source is copied. If
@@ -11080,7 +11078,6 @@ function bootstrap(element, modules) {
           element.data('$injector', injector);
           compile(element)(scope);
         });
-        animate.enabled(true);
       }]
     );
     return injector;
@@ -11117,6 +11114,7 @@ function bindJQuery() {
     jqLite = jQuery;
     extend(jQuery.fn, {
       scope: JQLitePrototype.scope,
+      isolateScope: JQLitePrototype.isolateScope,
       controller: JQLitePrototype.controller,
       injector: JQLitePrototype.injector,
       inheritedData: JQLitePrototype.inheritedData
@@ -11188,6 +11186,28 @@ function getter(obj, path, bindFnToScope) {
     return bind(lastInstance, obj);
   }
   return obj;
+}
+
+/**
+ * Return the siblings between `startNode` and `endNode`, inclusive
+ * @param {Object} object with `startNode` and `endNode` properties
+ * @returns jQlite object containing the elements
+ */
+function getBlockElements(block) {
+  if (block.startNode === block.endNode) {
+    return jqLite(block.startNode);
+  }
+
+  var element = block.startNode;
+  var elements = [element];
+
+  do {
+    element = element.nextSibling;
+    if (!element) break;
+    elements.push(element);
+  } while (element !== block.endNode);
+
+  return jqLite(elements);
 }
 
 /**
@@ -11573,11 +11593,11 @@ function setupModuleLoader(window) {
  * - `codeName` – `{string}` – Code name of the release, such as "jiggling-armfat".
  */
 var version = {
-  full: '1.2.0-76c7043',    // all of these placeholder strings will be replaced by grunt's
+  full: '1.2.1-2a5ca03',    // all of these placeholder strings will be replaced by grunt's
   major: 1,    // package task
   minor: "NG_VERSION_MINOR",
-  dot: 0,
-  codeName: ''
+  dot: 1,
+  codeName: 'timely-delivery'
 };
 
 
@@ -11777,6 +11797,9 @@ function publishExternalAPI(angular){
  * - `injector()` - retrieves the injector of the current element or its parent.
  * - `scope()` - retrieves the {@link api/ng.$rootScope.Scope scope} of the current
  *   element or its parent.
+ * - `isolateScope()` - retrieves an isolate {@link api/ng.$rootScope.Scope scope} if one is attached directly to the
+ *   current element. This getter should be used only on elements that contain a directive which starts a new isolate
+ *   scope. Calling `scope()` on this element always returns the original non-isolate scope.
  * - `inheritedData()` - same as `data()`, but walks up the DOM until a value is found or the top
  *   parent element is reached.
  *
@@ -12036,9 +12059,13 @@ function jqLiteInheritedData(element, name, value) {
   if(element[0].nodeType == 9) {
     element = element.find('html');
   }
+  var names = isArray(name) ? name : [name];
 
   while (element.length) {
-    if ((value = element.data(name)) !== undefined) return value;
+
+    for (var i = 0, ii = names.length; i < ii; i++) {
+      if ((value = element.data(names[i])) !== undefined) return value;
+    }
     element = element.parent();
   }
 }
@@ -12110,7 +12137,13 @@ forEach({
   inheritedData: jqLiteInheritedData,
 
   scope: function(element) {
-    return jqLiteInheritedData(element, '$scope');
+    // Can't use jqLiteData here directly so we stay compatible with jQuery!
+    return jqLite(element).data('$scope') || jqLiteInheritedData(element.parentNode || element, ['$isolateScope', '$scope']);
+  },
+
+  isolateScope: function(element) {
+    // Can't use jqLiteData here directly so we stay compatible with jQuery!
+    return jqLite(element).data('$isolateScope') || jqLite(element).data('$isolateScopeNoTemplate');
   },
 
   controller: jqLiteController ,
@@ -15241,7 +15274,7 @@ function $CompileProvider($provide) {
       return linkFnFound ? compositeLinkFn : null;
 
       function compositeLinkFn(scope, nodeList, $rootElement, boundTranscludeFn) {
-        var nodeLinkFn, childLinkFn, node, childScope, childTranscludeFn, i, ii, n;
+        var nodeLinkFn, childLinkFn, node, $node, childScope, childTranscludeFn, i, ii, n;
 
         // copy nodeList so that linking doesn't break due to live list updates.
         var stableNodeList = [];
@@ -15253,11 +15286,13 @@ function $CompileProvider($provide) {
           node = stableNodeList[n];
           nodeLinkFn = linkFns[i++];
           childLinkFn = linkFns[i++];
+          $node = jqLite(node);
 
           if (nodeLinkFn) {
             if (nodeLinkFn.scope) {
-              childScope = scope.$new(isObject(nodeLinkFn.scope));
-              jqLite(node).data('$scope', childScope);
+              childScope = scope.$new();
+              $node.data('$scope', childScope);
+              safeAddClass($node, 'ng-scope');
             } else {
               childScope = scope;
             }
@@ -15495,10 +15530,8 @@ function $CompileProvider($provide) {
             assertNoDuplicate('new/isolated scope', newIsolateScopeDirective, directive,
                               $compileNode);
             if (isObject(directiveValue)) {
-              safeAddClass($compileNode, 'ng-isolate-scope');
               newIsolateScopeDirective = directive;
             }
-            safeAddClass($compileNode, 'ng-scope');
           }
         }
 
@@ -15513,9 +15546,10 @@ function $CompileProvider($provide) {
         }
 
         if (directiveValue = directive.transclude) {
-          // Special case ngRepeat so that we don't complain about duplicate transclusion, ngRepeat
-          // knows how to handle this on its own.
-          if (directiveName !== 'ngRepeat') {
+          // Special case ngIf and ngRepeat so that we don't complain about duplicate transclusion.
+          // This option should only be used by directives that know how to how to safely handle element transclusion,
+          // where the transcluded nodes are added or replaced after linking.
+          if (!directive.$$tlb) {
             assertNoDuplicate('transclusion', transcludeDirective, directive, $compileNode);
             transcludeDirective = directive;
           }
@@ -15576,16 +15610,16 @@ function $CompileProvider($provide) {
 
             // combine directives from the original node and from the template:
             // - take the array of directives for this element
-            // - split it into two parts, those that were already applied and those that weren't
-            // - collect directives from the template, add them to the second group and sort them
-            // - append the second group with new directives to the first group
-            directives = directives.concat(
-                collectDirectives(
-                    compileNode,
-                    directives.splice(i + 1, directives.length - (i + 1)),
-                    newTemplateAttrs
-                )
-            );
+            // - split it into two parts, those that already applied (processed) and those that weren't (unprocessed)
+            // - collect directives from the template and sort them by priority
+            // - combine directives as: processed + template + unprocessed
+            var templateDirectives = collectDirectives(compileNode, [], newTemplateAttrs);
+            var unprocessedDirectives = directives.splice(i + 1, directives.length - (i + 1));
+
+            if (newIsolateScopeDirective) {
+              markDirectivesAsIsolate(templateDirectives);
+            }
+            directives = directives.concat(templateDirectives).concat(unprocessedDirectives);
             mergeTemplateAttributes(templateAttrs, newTemplateAttrs);
 
             ii = directives.length;
@@ -15630,7 +15664,7 @@ function $CompileProvider($provide) {
 
       }
 
-      nodeLinkFn.scope = newScopeDirective && newScopeDirective.scope;
+      nodeLinkFn.scope = newScopeDirective && newScopeDirective.scope === true;
       nodeLinkFn.transclude = transcludeDirective && childTranscludeFn;
 
       // might be normal or delayed nodeLinkFn depending on if templateUrl is present
@@ -15642,11 +15676,17 @@ function $CompileProvider($provide) {
         if (pre) {
           if (attrStart) pre = groupElementsLinkFnWrapper(pre, attrStart, attrEnd);
           pre.require = directive.require;
+          if (newIsolateScopeDirective === directive || directive.$$isolateScope) {
+            pre = cloneAndAnnotateFn(pre, {isolateScope: true});
+          }
           preLinkFns.push(pre);
         }
         if (post) {
           if (attrStart) post = groupElementsLinkFnWrapper(post, attrStart, attrEnd);
           post.require = directive.require;
+          if (newIsolateScopeDirective === directive || directive.$$isolateScope) {
+            post = cloneAndAnnotateFn(post, {isolateScope: true});
+          }
           postLinkFns.push(post);
         }
       }
@@ -15687,7 +15727,7 @@ function $CompileProvider($provide) {
 
 
       function nodeLinkFn(childLinkFn, scope, linkNode, $rootElement, boundTranscludeFn) {
-        var attrs, $element, i, ii, linkFn, controller;
+        var attrs, $element, i, ii, linkFn, controller, isolateScope;
 
         if (compileNode === linkNode) {
           attrs = templateAttrs;
@@ -15698,8 +15738,19 @@ function $CompileProvider($provide) {
 
         if (newIsolateScopeDirective) {
           var LOCAL_REGEXP = /^\s*([@=&])(\??)\s*(\w*)\s*$/;
+          var $linkNode = jqLite(linkNode);
 
-          var parentScope = scope.$parent || scope;
+          isolateScope = scope.$new(true);
+
+          if (templateDirective && (templateDirective === newIsolateScopeDirective.$$originalDirective)) {
+            $linkNode.data('$isolateScope', isolateScope) ;
+          } else {
+            $linkNode.data('$isolateScopeNoTemplate', isolateScope);
+          }
+
+
+
+          safeAddClass($linkNode, 'ng-isolate-scope');
 
           forEach(newIsolateScopeDirective.scope, function(definition, scopeName) {
             var match = definition.match(LOCAL_REGEXP) || [],
@@ -15709,19 +15760,19 @@ function $CompileProvider($provide) {
                 lastValue,
                 parentGet, parentSet;
 
-            scope.$$isolateBindings[scopeName] = mode + attrName;
+            isolateScope.$$isolateBindings[scopeName] = mode + attrName;
 
             switch (mode) {
 
               case '@':
                 attrs.$observe(attrName, function(value) {
-                  scope[scopeName] = value;
+                  isolateScope[scopeName] = value;
                 });
-                attrs.$$observers[attrName].$$scope = parentScope;
+                attrs.$$observers[attrName].$$scope = scope;
                 if( attrs[attrName] ) {
                   // If the attribute has been provided then we trigger an interpolation to ensure
                   // the value is there for use in the link fn
-                  scope[scopeName] = $interpolate(attrs[attrName])(parentScope);
+                  isolateScope[scopeName] = $interpolate(attrs[attrName])(scope);
                 }
                 break;
 
@@ -15732,23 +15783,23 @@ function $CompileProvider($provide) {
                 parentGet = $parse(attrs[attrName]);
                 parentSet = parentGet.assign || function() {
                   // reset the change, or we will throw this exception on every $digest
-                  lastValue = scope[scopeName] = parentGet(parentScope);
+                  lastValue = isolateScope[scopeName] = parentGet(scope);
                   throw $compileMinErr('nonassign',
                       "Expression '{0}' used with directive '{1}' is non-assignable!",
                       attrs[attrName], newIsolateScopeDirective.name);
                 };
-                lastValue = scope[scopeName] = parentGet(parentScope);
-                scope.$watch(function parentValueWatch() {
-                  var parentValue = parentGet(parentScope);
+                lastValue = isolateScope[scopeName] = parentGet(scope);
+                isolateScope.$watch(function parentValueWatch() {
+                  var parentValue = parentGet(scope);
 
-                  if (parentValue !== scope[scopeName]) {
+                  if (parentValue !== isolateScope[scopeName]) {
                     // we are out of sync and need to copy
                     if (parentValue !== lastValue) {
                       // parent changed and it has precedence
-                      lastValue = scope[scopeName] = parentValue;
+                      lastValue = isolateScope[scopeName] = parentValue;
                     } else {
                       // if the parent can be assigned then do so
-                      parentSet(parentScope, parentValue = lastValue = scope[scopeName]);
+                      parentSet(scope, parentValue = lastValue = isolateScope[scopeName]);
                     }
                   }
                   return parentValue;
@@ -15757,8 +15808,8 @@ function $CompileProvider($provide) {
 
               case '&':
                 parentGet = $parse(attrs[attrName]);
-                scope[scopeName] = function(locals) {
-                  return parentGet(parentScope, locals);
+                isolateScope[scopeName] = function(locals) {
+                  return parentGet(scope, locals);
                 };
                 break;
 
@@ -15774,7 +15825,7 @@ function $CompileProvider($provide) {
         if (controllerDirectives) {
           forEach(controllerDirectives, function(directive) {
             var locals = {
-              $scope: scope,
+              $scope: directive === newIsolateScopeDirective || directive.$$isolateScope ? isolateScope : scope,
               $element: $element,
               $attrs: attrs,
               $transclude: boundTranscludeFn
@@ -15806,7 +15857,7 @@ function $CompileProvider($provide) {
         for(i = 0, ii = preLinkFns.length; i < ii; i++) {
           try {
             linkFn = preLinkFns[i];
-            linkFn(scope, $element, attrs,
+            linkFn(linkFn.isolateScope ? isolateScope : scope, $element, attrs,
                 linkFn.require && getControllers(linkFn.require, $element));
           } catch (e) {
             $exceptionHandler(e, startingTag($element));
@@ -15814,13 +15865,19 @@ function $CompileProvider($provide) {
         }
 
         // RECURSION
-        childLinkFn && childLinkFn(scope, linkNode.childNodes, undefined, boundTranscludeFn);
+        // We only pass the isolate scope, if the isolate directive has a template,
+        // otherwise the child elements do not belong to the isolate directive.
+        var scopeToChild = scope;
+        if (newIsolateScopeDirective && (newIsolateScopeDirective.template || newIsolateScopeDirective.templateUrl === null)) {
+          scopeToChild = isolateScope;
+        }
+        childLinkFn && childLinkFn(scopeToChild, linkNode.childNodes, undefined, boundTranscludeFn);
 
         // POSTLINKING
         for(i = postLinkFns.length - 1; i >= 0; i--) {
           try {
             linkFn = postLinkFns[i];
-            linkFn(scope, $element, attrs,
+            linkFn(linkFn.isolateScope ? isolateScope : scope, $element, attrs,
                 linkFn.require && getControllers(linkFn.require, $element));
           } catch (e) {
             $exceptionHandler(e, startingTag($element));
@@ -15829,6 +15886,12 @@ function $CompileProvider($provide) {
       }
     }
 
+    function markDirectivesAsIsolate(directives) {
+      // mark all directives as needing isolate scope.
+      for (var j = 0, jj = directives.length; j < jj; j++) {
+        directives[j] = inherit(directives[j], {$$isolateScope: true});
+      }
+    }
 
     /**
      * looks up the directive and decorates it with exception handling and proper parameters. We
@@ -15918,7 +15981,7 @@ function $CompileProvider($provide) {
           origAsyncDirective = directives.shift(),
           // The fact that we have to copy and patch the directive seems wrong!
           derivedSyncDirective = extend({}, origAsyncDirective, {
-            templateUrl: null, transclude: null, replace: null
+            templateUrl: null, transclude: null, replace: null, $$originalDirective: origAsyncDirective
           }),
           templateUrl = (isFunction(origAsyncDirective.templateUrl))
               ? origAsyncDirective.templateUrl($compileNode, tAttrs)
@@ -15944,7 +16007,12 @@ function $CompileProvider($provide) {
 
             tempTemplateAttrs = {$attr: {}};
             replaceWith($rootElement, $compileNode, compileNode);
-            collectDirectives(compileNode, directives, tempTemplateAttrs);
+            var templateDirectives = collectDirectives(compileNode, [], tempTemplateAttrs);
+
+            if (isObject(origAsyncDirective.scope)) {
+              markDirectivesAsIsolate(templateDirectives);
+            }
+            directives = templateDirectives.concat(directives);
             mergeTemplateAttributes(tAttrs, tempTemplateAttrs);
           } else {
             compileNode = beforeTemplateCompileNode;
@@ -16146,6 +16214,11 @@ function $CompileProvider($provide) {
 
       elementsToRemove[0] = newNode;
       elementsToRemove.length = 1;
+    }
+
+
+    function cloneAndAnnotateFn(fn, annotation) {
+      return extend(function() { return fn.apply(null, arguments); }, fn, annotation);
     }
   }];
 }
@@ -16659,8 +16732,9 @@ function $HttpProvider() {
      * with the lowercased HTTP method name as the key, e.g.
      * `$httpProvider.defaults.headers.get = { 'My-Header' : 'value' }.
      *
-     * Additionally, the defaults can be set at runtime via the `$http.defaults` object in the same
-     * fashion.
+     * The defaults can also be set at runtime via the `$http.defaults` object in the same
+     * fashion. In addition, you can supply a `headers` property in the config object passed when
+     * calling `$http(config)`, which overrides the defaults without changing them globally.
      *
      *
      * # Transforming Requests and Responses
@@ -18316,9 +18390,10 @@ LocationHashbangInHtml5Url.prototype =
    * @param {string|Object.<string>|Object.<Array.<string>>} search New search params - string or
    * hash object. Hash object may contain an array of values, which will be decoded as duplicates in
    * the url.
-   * 
-   * @param {string=} paramValue If `search` is a string, then `paramValue` will override only a
-   * single search parameter. If the value is `null`, the parameter will be deleted.
+   *
+   * @param {(string|Array<string>)=} paramValue If `search` is a string, then `paramValue` will override only a
+   * single search parameter. If `paramValue` is an array, it will set the parameter as a
+   * comma-separated value. If `paramValue` is `null`, the parameter will be deleted.
    *
    * @return {string} search
    */
@@ -18472,7 +18547,7 @@ function $LocationProvider(){
       return html5Mode;
     }
   };
-    
+
   /**
    * @ngdoc event
    * @name ng.$location#$locationChangeStart
@@ -18488,14 +18563,14 @@ function $LocationProvider(){
    * @param {string} newUrl New URL
    * @param {string=} oldUrl URL that was before it was changed.
    */
-    
+
   /**
    * @ngdoc event
    * @name ng.$location#$locationChangeSuccess
    * @eventOf ng.$location
    * @eventType broadcast on root scope
    * @description
-   * Broadcasted after a URL was changed. 
+   * Broadcasted after a URL was changed.
    *
    * @param {Object} angularEvent Synthetic event object.
    * @param {string} newUrl New URL
@@ -18610,7 +18685,7 @@ function $LocationProvider(){
  * @requires $window
  *
  * @description
- * Simple service for logging. Default implementation writes the message
+ * Simple service for logging. Default implementation safely writes the message
  * into the browser's console (if present).
  * 
  * The main purpose of this service is to simplify debugging and troubleshooting.
@@ -18772,18 +18847,23 @@ var promiseWarning;
 // ------------------------------
 // Angular expressions are generally considered safe because these expressions only have direct
 // access to $scope and locals. However, one can obtain the ability to execute arbitrary JS code by
-// obtaining a reference to native JS functions such as the Function constructor.
+// obtaining a reference to native JS functions such as the Function constructor, the global Window
+// or Document object.  In addition, many powerful functions for use by JavaScript code are
+// published on scope that shouldn't be available from within an Angular expression.
 //
 // As an example, consider the following Angular expression:
 //
 //   {}.toString.constructor(alert("evil JS code"))
 //
 // We want to prevent this type of access. For the sake of performance, during the lexing phase we
-// disallow any "dotted" access to any member named "constructor".
+// disallow any "dotted" access to any member named "constructor" or to any member whose name begins
+// or ends with an underscore.  The latter allows one to exclude the private / JavaScript only API
+// available on the scope and controllers from the context of an Angular expression.
 //
-// For reflective calls (a[b]) we check that the value of the lookup is not the Function constructor
-// while evaluating the expression, which is a stronger but more expensive test. Since reflective
-// calls are expensive anyway, this is not such a big deal compared to static dereferencing.
+// For reflective calls (a[b]), we check that the value of the lookup is not the Function
+// constructor, Window or DOM node while evaluating the expression, which is a stronger but more
+// expensive test. Since reflective calls are expensive anyway, this is not such a big deal compared
+// to static dereferencing.
 //
 // This sandboxing technique is not perfect and doesn't aim to be. The goal is to prevent exploits
 // against the expression language, but not to prevent exploits that were enabled by exposing
@@ -18797,10 +18877,18 @@ var promiseWarning;
 // In general, it is not possible to access a Window object from an angular expression unless a
 // window or some DOM object that has a reference to window is published onto a Scope.
 
-function ensureSafeMemberName(name, fullExpression) {
-  if (name === "constructor") {
+function ensureSafeMemberName(name, fullExpression, allowConstructor) {
+  if (typeof name !== 'string' && toString.apply(name) !== "[object String]") {
+    return name;
+  }
+  if (name === "constructor" && !allowConstructor) {
     throw $parseMinErr('isecfld',
         'Referencing "constructor" field in Angular expressions is disallowed! Expression: {0}',
+        fullExpression);
+  }
+  if (name.charAt(0) === '_' || name.charAt(name.length-1) === '_') {
+    throw $parseMinErr('isecprv',
+        'Referencing private fields in Angular expressions is disallowed! Expression: {0}',
         fullExpression);
   }
   return name;
@@ -19486,7 +19574,10 @@ Parser.prototype = {
 
     return extend(function(self, locals) {
       var o = obj(self, locals),
-          i = indexFn(self, locals),
+          // In the getter, we will not block looking up "constructor" by name in order to support user defined
+          // constructors.  However, if value looked up is the Function constructor, we will still block it in the
+          // ensureSafeObject call right after we look up o[i] (a few lines below.)
+          i = ensureSafeMemberName(indexFn(self, locals), parser.text, true /* allowConstructor */),
           v, p;
 
       if (!o) return undefined;
@@ -19502,7 +19593,7 @@ Parser.prototype = {
       return v;
     }, {
       assign: function(self, value, locals) {
-        var key = indexFn(self, locals);
+        var key = ensureSafeMemberName(indexFn(self, locals), parser.text);
         // prevent overwriting of Function.constructor which would break ensureSafeObject check
         var safe = ensureSafeObject(obj(self, locals), parser.text);
         return safe[key] = value;
@@ -21979,10 +22070,10 @@ function $SceDelegateProvider() {
  *
  * <pre class="prettyprint">
  *     <input ng-model="userHtml">
- *     <div ng-bind-html="{{userHtml}}">
+ *     <div ng-bind-html="userHtml">
  * </pre>
  *
- * Notice that `ng-bind-html` is bound to `{{userHtml}}` controlled by the user.  With SCE
+ * Notice that `ng-bind-html` is bound to `userHtml` controlled by the user.  With SCE
  * disabled, this application allows the user to render arbitrary HTML into the DIV.
  * In a more realistic example, one may be rendering user comments, blog articles, etc. via
  * bindings.  (HTML is just one example of a context where rendering user controlled input creates
@@ -22717,7 +22808,8 @@ function $SnifferProvider() {
       csp: csp(),
       vendorPrefix: vendorPrefix,
       transitions : transitions,
-      animations : animations
+      animations : animations,
+      msie : msie
     };
   }];
 }
@@ -23084,8 +23176,7 @@ function $WindowProvider(){
  *
  *
  * For more information about how angular filters work, and how to create your own filters, see
- * {@link guide/dev_guide.templates.filters Understanding Angular Filters} in the angular Developer
- * Guide.
+ * {@link guide/filter Filters} in the Angular Developer Guide.
  */
 /**
  * @ngdoc method
@@ -23177,9 +23268,6 @@ function $FilterProvider($provide) {
  *
  * @description
  * Selects a subset of items from `array` and returns it as a new array.
- *
- * Note: This function is used to augment the `Array` type in Angular expressions. See
- * {@link ng.$filter} for more information about Angular arrays.
  *
  * @param {Array} array The source array.
  * @param {string|Object|function()} expression The predicate to be used for selecting items from
@@ -23867,9 +23955,6 @@ var uppercaseFilter = valueFn(uppercase);
  * are taken from either the beginning or the end of the source array or string, as specified by
  * the value and sign (positive or negative) of `limit`.
  *
- * Note: This function is used to augment the `Array` type in Angular expressions. See
- * {@link ng.$filter} for more information about Angular arrays.
- *
  * @param {Array|string} input Source array or string to be limited.
  * @param {string|number} limit The length of the returned array or string. If the `limit` number 
  *     is positive, `limit` number of items from the beginning of the source array/string are copied.
@@ -23967,9 +24052,6 @@ function limitToFilter(){
  *
  * @description
  * Orders a specified `array` by the `expression` predicate.
- *
- * Note: this function is used to augment the `Array` type in Angular expressions. See
- * {@link ng.$filter} for more information about Angular arrays.
  *
  * @param {Array} array The array to sort.
  * @param {function(*)|string|Array.<(function(*)|string)>} expression A predicate to be
@@ -24902,8 +24984,7 @@ var inputType = {
    *    patterns defined as scope expressions.
    * @param {string=} ngChange Angular expression to be executed when input changes due to user
    *    interaction with the input element.
-   * @param {boolean=} [ngTrim=true] If set to false Angular will not automatically trimming the
-   *    input.
+   * @param {boolean=} [ngTrim=true] If set to false Angular will not automatically trim the input.
    *
    * @example
       <doc:example>
@@ -25807,7 +25888,7 @@ var VALID_CLASS = 'ng-valid',
  * When the directive updates the model value, calling `ngModel.$setViewValue()` the property
  * on the outer scope will not be updated. However you can get around this by using $parent.
  *
- * Here is an example of this situation.  You'll notice that the first div is not updating the input. 
+ * Here is an example of this situation.  You'll notice that the first div is not updating the input.
  * However the second div can update the input properly.
  *
  * <example module="badIsolatedDirective">
@@ -26088,7 +26169,7 @@ var ngModelDirective = function() {
 
       formCtrl.$addControl(modelCtrl);
 
-      element.on('$destroy', function() {
+      scope.$on('$destroy', function() {
         formCtrl.$removeControl(modelCtrl);
       });
     }
@@ -26674,25 +26755,17 @@ function classDirective(name, selector) {
       <input type="button" value="set" ng-click="myVar='my-class'">
       <input type="button" value="clear" ng-click="myVar=''">
       <br>
-      <span ng-class="myVar">Sample Text</span>
+      <span class="base-class" ng-class="myVar">Sample Text</span>
      </file>
      <file name="style.css">
-       .my-class-add, .my-class-remove {
+       .base-class {
          -webkit-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
-         -moz-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
-         -o-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
          transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
        }
 
-       .my-class,
-       .my-class-add.my-class-add-active {
+       .base-class.my-class {
          color: red;
          font-size:3em;
-       }
-
-       .my-class-remove.my-class-remove-active {
-         font-size:1.0em;
-         color:black;
        }
      </file>
      <file name="scenario.js">
@@ -26716,10 +26789,10 @@ function classDirective(name, selector) {
 
    ## ngClass and pre-existing CSS3 Transitions/Animations
    The ngClass directive still supports CSS3 Transitions/Animations even if they do not follow the ngAnimate CSS naming structure.
-   Therefore, if any CSS3 Transition/Animation styles (outside of ngAnimate) are set on the element, then, if a ngClass animation
-   is triggered, the ngClass animation will be skipped so that ngAnimate can allow for the pre-existing transition or animation to
-   take over. This restriction allows for ngClass to still work with standard CSS3 Transitions/Animations that are defined
-   outside of ngAnimate.
+   Upon animation ngAnimate will apply supplementary CSS classes to track the start and end of an animation, but this will not hinder
+   any pre-existing CSS transitions already on the element. To get an idea of what happens during a class-based animation, be sure
+   to view the step by step details of {@link ngAnimate.$animate#methods_addclass $animate.addClass} and
+   {@link ngAnimate.$animate#methods_removeclass $animate.removeClass}.
  */
 var ngClassDirective = classDirective('', true);
 
@@ -27136,13 +27209,17 @@ forEach(
   function(name) {
     var directiveName = directiveNormalize('ng-' + name);
     ngEventDirectives[directiveName] = ['$parse', function($parse) {
-      return function(scope, element, attr) {
-        var fn = $parse(attr[directiveName]);
-        element.on(lowercase(name), function(event) {
-          scope.$apply(function() {
-            fn(scope, {$event:event});
-          });
-        });
+      return {
+        compile: function($element, attr) {
+          var fn = $parse(attr[directiveName]);
+          return function(scope, element, attr) {
+            element.on(lowercase(name), function(event) {
+              scope.$apply(function() {
+                fn(scope, {$event:event});
+              });
+            });
+          };
+        }
       };
     }];
   }
@@ -27494,10 +27571,11 @@ forEach(
         padding:10px;
       }
 
+      /&#42;
+        The transition styles can also be placed on the CSS base class above
+      &#42;/
       .animate-if.ng-enter, .animate-if.ng-leave {
         -webkit-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
-        -moz-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
-        -o-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
         transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
       }
 
@@ -27506,8 +27584,8 @@ forEach(
         opacity:0;
       }
 
-      .animate-if.ng-enter.ng-enter-active,
-      .animate-if.ng-leave {
+      .animate-if.ng-leave,
+      .animate-if.ng-enter.ng-enter-active {
         opacity:1;
       }
     </file>
@@ -27519,24 +27597,34 @@ var ngIfDirective = ['$animate', function($animate) {
     priority: 600,
     terminal: true,
     restrict: 'A',
+    $$tlb: true,
     compile: function (element, attr, transclude) {
       return function ($scope, $element, $attr) {
-        var childElement, childScope;
+        var block, childScope;
         $scope.$watch($attr.ngIf, function ngIfWatchAction(value) {
-          if (childElement) {
-            $animate.leave(childElement);
-            childElement = undefined;
-          }
-          if (childScope) {
-            childScope.$destroy();
-            childScope = undefined;
-          }
+
           if (toBoolean(value)) {
-            childScope = $scope.$new();
-            transclude(childScope, function (clone) {
-              childElement = clone;
-              $animate.enter(clone, $element.parent(), $element);
-            });
+            if (!childScope) {
+              childScope = $scope.$new();
+              transclude(childScope, function (clone) {
+                block = {
+                  startNode: clone[0],
+                  endNode: clone[clone.length++] = document.createComment(' end ngIf: ' + $attr.ngIf + ' ')
+                };
+                $animate.enter(clone, $element.parent(), $element);
+              });
+            }
+          } else {
+
+            if (childScope) {
+              childScope.$destroy();
+              childScope = null;
+            }
+
+            if (block) {
+              $animate.leave(getBlockElements(block));
+              block = null;
+            }
           }
         });
       };
@@ -27595,8 +27683,8 @@ var ngIfDirective = ['$animate', function($animate) {
        </select>
        url of the template: <tt>{{template.url}}</tt>
        <hr/>
-       <div class="example-animate-container">
-         <div class="include-example" ng-include="template.url"></div>
+       <div class="slide-animate-container">
+         <div class="slide-animate" ng-include="template.url"></div>
        </div>
      </div>
     </file>
@@ -27615,7 +27703,7 @@ var ngIfDirective = ['$animate', function($animate) {
       Content of template2.html
     </file>
     <file name="animations.css">
-      .example-animate-container {
+      .slide-animate-container {
         position:relative;
         background:white;
         border:1px solid black;
@@ -27623,14 +27711,12 @@ var ngIfDirective = ['$animate', function($animate) {
         overflow:hidden;
       }
 
-      .example-animate-container > div {
+      .slide-animate {
         padding:10px;
       }
 
-      .include-example.ng-enter, .include-example.ng-leave {
+      .slide-animate.ng-enter, .slide-animate.ng-leave {
         -webkit-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
-        -moz-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
-        -o-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
         transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
 
         position:absolute;
@@ -27642,17 +27728,17 @@ var ngIfDirective = ['$animate', function($animate) {
         padding:10px;
       }
 
-      .include-example.ng-enter {
+      .slide-animate.ng-enter {
         top:-50px;
       }
-      .include-example.ng-enter.ng-enter-active {
+      .slide-animate.ng-enter.ng-enter-active {
         top:0;
       }
 
-      .include-example.ng-leave {
+      .slide-animate.ng-leave {
         top:0;
       }
-      .include-example.ng-leave.ng-leave-active {
+      .slide-animate.ng-leave.ng-leave-active {
         top:50px;
       }
     </file>
@@ -27722,6 +27808,11 @@ var ngIncludeDirective = ['$http', '$templateCache', '$anchorScroll', '$compile'
         };
 
         scope.$watch($sce.parseAsResourceUrl(srcExp), function ngIncludeWatchAction(src) {
+          var afterAnimation = function() {
+            if (isDefined(autoScrollExp) && (!autoScrollExp || scope.$eval(autoScrollExp))) {
+              $anchorScroll();
+            }
+          };
           var thisChangeId = ++changeCounter;
 
           if (src) {
@@ -27736,13 +27827,8 @@ var ngIncludeDirective = ['$http', '$templateCache', '$anchorScroll', '$compile'
                 currentElement = clone;
 
                 currentElement.html(response);
-                $animate.enter(currentElement, null, $element);
+                $animate.enter(currentElement, null, $element, afterAnimation);
                 $compile(currentElement.contents())(currentScope);
-
-                if (isDefined(autoScrollExp) && (!autoScrollExp || scope.$eval(autoScrollExp))) {
-                  $anchorScroll();
-                }
-
                 currentScope.$emit('$includeContentLoaded');
                 scope.$eval(onloadExp);
               });
@@ -27771,7 +27857,7 @@ var ngIncludeDirective = ['$http', '$templateCache', '$anchorScroll', '$compile'
  * <div class="alert alert-error">
  * The only appropriate use of `ngInit` for aliasing special properties of
  * {@link api/ng.directive:ngRepeat `ngRepeat`}, as seen in the demo below. Besides this case, you
- * should use {@link guide/dev_guide.mvc.understanding_controller controllers} rather than `ngInit`
+ * should use {@link guide/controller controllers} rather than `ngInit`
  * to initialize values on a scope.
  * </div>
  *
@@ -28202,49 +28288,35 @@ var ngPluralizeDirective = ['$locale', '$interpolate', function($locale, $interp
         border:1px solid black;
         list-style:none;
         margin:0;
-        padding:0;
+        padding:0 10px;
       }
 
-      .example-animate-container > li {
-        padding:10px;
+      .animate-repeat {
+        line-height:40px;
         list-style:none;
+        box-sizing:border-box;
       }
 
+      .animate-repeat.ng-move,
       .animate-repeat.ng-enter,
-      .animate-repeat.ng-leave,
-      .animate-repeat.ng-move {
+      .animate-repeat.ng-leave {
         -webkit-transition:all linear 0.5s;
-        -moz-transition:all linear 0.5s;
-        -o-transition:all linear 0.5s;
         transition:all linear 0.5s;
       }
 
+      .animate-repeat.ng-leave.ng-leave-active,
+      .animate-repeat.ng-move,
       .animate-repeat.ng-enter {
-        line-height:0;
         opacity:0;
-        padding-top:0;
-        padding-bottom:0;
+        max-height:0;
       }
+
+      .animate-repeat.ng-leave,
+      .animate-repeat.ng-move.ng-move-active,
       .animate-repeat.ng-enter.ng-enter-active {
-        line-height:20px;
         opacity:1;
-        padding:10px;
+        max-height:40px;
       }
-
-      .animate-repeat.ng-leave {
-        opacity:1;
-        line-height:20px;
-        padding:10px;
-      }
-      .animate-repeat.ng-leave.ng-leave-active {
-        opacity:0;
-        line-height:0;
-        padding-top:0;
-        padding-bottom:0;
-      }
-
-      .animate-repeat.ng-move { }
-      .animate-repeat.ng-move.ng-move-active { }
     </file>
     <file name="scenario.js">
        it('should render initial data set', function() {
@@ -28276,6 +28348,7 @@ var ngRepeatDirective = ['$parse', '$animate', function($parse, $animate) {
     transclude: 'element',
     priority: 1000,
     terminal: true,
+    $$tlb: true,
     compile: function(element, attr, linker) {
       return function($scope, $element, $attr){
         var expression = $attr.ngRepeat;
@@ -28455,23 +28528,6 @@ var ngRepeatDirective = ['$parse', '$animate', function($parse, $animate) {
       };
     }
   };
-
-  function getBlockElements(block) {
-    if (block.startNode === block.endNode) {
-      return jqLite(block.startNode);
-    }
-
-    var element = block.startNode;
-    var elements = [element];
-
-    do {
-      element = element.nextSibling;
-      if (!element) break;
-      elements.push(element);
-    } while (element !== block.endNode);
-
-    return jqLite(elements);
-  }
 }];
 
 /**
@@ -28574,29 +28630,25 @@ var ngRepeatDirective = ['$parse', '$animate', function($parse, $animate) {
       </div>
     </file>
     <file name="animations.css">
-      .animate-show.ng-hide-add, 
-      .animate-show.ng-hide-remove {
+      .animate-show {
         -webkit-transition:all linear 0.5s;
-        -moz-transition:all linear 0.5s;
-        -o-transition:all linear 0.5s;
         transition:all linear 0.5s;
-        display:block!important;
-      }
-
-      .animate-show.ng-hide-add.ng-hide-add-active,
-      .animate-show.ng-hide-remove {
-        line-height:0;
-        opacity:0;
-        padding:0 10px;
-      }
-
-      .animate-show.ng-hide-add,
-      .animate-show.ng-hide-remove.ng-hide-remove-active {
         line-height:20px;
         opacity:1;
         padding:10px;
         border:1px solid black;
         background:white;
+      }
+
+      .animate-show.ng-hide-add,
+      .animate-show.ng-hide-remove {
+        display:block!important;
+      }
+
+      .animate-show.ng-hide {
+        line-height:0;
+        opacity:0;
+        padding:0 10px;
       }
 
       .check-element {
@@ -28727,29 +28779,25 @@ var ngShowDirective = ['$animate', function($animate) {
       </div>
     </file>
     <file name="animations.css">
-      .animate-hide.ng-hide-add, 
-      .animate-hide.ng-hide-remove {
+      .animate-hide {
         -webkit-transition:all linear 0.5s;
-        -moz-transition:all linear 0.5s;
-        -o-transition:all linear 0.5s;
         transition:all linear 0.5s;
-        display:block!important;
-      }
-
-      .animate-hide.ng-hide-add.ng-hide-add-active,
-      .animate-hide.ng-hide-remove {
-        line-height:0;
-        opacity:0;
-        padding:0 10px;
-      }
-
-      .animate-hide.ng-hide-add,
-      .animate-hide.ng-hide-remove.ng-hide-remove-active {
         line-height:20px;
         opacity:1;
         padding:10px;
         border:1px solid black;
         background:white;
+      }
+
+      .animate-hide.ng-hide-add,
+      .animate-hide.ng-hide-remove {
+        display:block!important;
+      }
+
+      .animate-hide.ng-hide {
+        line-height:0;
+        opacity:0;
+        padding:0 10px;
       }
 
       .check-element {
@@ -28880,9 +28928,9 @@ var ngStyleDirective = ngDirective(function(scope, element, attr) {
         <hr/>
         <div class="animate-switch-container"
           ng-switch on="selection">
-            <div ng-switch-when="settings">Settings Div</div>
-            <div ng-switch-when="home">Home Span</div>
-            <div ng-switch-default>default</div>
+            <div class="animate-switch" ng-switch-when="settings">Settings Div</div>
+            <div class="animate-switch" ng-switch-when="home">Home Span</div>
+            <div class="animate-switch" ng-switch-default>default</div>
         </div>
       </div>
     </file>
@@ -28901,15 +28949,12 @@ var ngStyleDirective = ngDirective(function(scope, element, attr) {
         overflow:hidden;
       }
 
-      .animate-switch-container > div {
+      .animate-switch {
         padding:10px;
       }
 
-      .animate-switch-container > .ng-enter,
-      .animate-switch-container > .ng-leave {
+      .animate-switch.ng-animate {
         -webkit-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
-        -moz-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
-        -o-transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
         transition:all cubic-bezier(0.250, 0.460, 0.450, 0.940) 0.5s;
 
         position:absolute;
@@ -28919,18 +28964,13 @@ var ngStyleDirective = ngDirective(function(scope, element, attr) {
         bottom:0;
       }
 
-      .animate-switch-container > .ng-enter {
+      .animate-switch.ng-leave.ng-leave-active,
+      .animate-switch.ng-enter {
         top:-50px;
       }
-      .animate-switch-container > .ng-enter.ng-enter-active {
+      .animate-switch.ng-leave,
+      .animate-switch.ng-enter.ng-enter-active {
         top:0;
-      }
-
-      .animate-switch-container > .ng-leave {
-        top:0;
-      }
-      .animate-switch-container > .ng-leave.ng-leave-active {
-        top:50px;
       }
     </file>
     <file name="scenario.js">
@@ -30325,15 +30365,10 @@ angular.scenario.Application.prototype.navigateTo = function(url, loadFn, errorF
 
         if ($window.angular) {
           // Disable animations
-
-          // TODO(i): this doesn't disable javascript animations
-          //          we don't need that for our tests, but it should be done
           $window.angular.resumeBootstrap([['$provide', function($provide) {
-            $provide.decorator('$sniffer', function($delegate) {
-              $delegate.transitions = false;
-              $delegate.animations = false;
-              return $delegate;
-            });
+            return ['$animate', function($animate) {
+              $animate.enabled(false);
+            }];
           }]]);
         }
 
@@ -31997,5 +32032,5 @@ if (config.autotest) {
 })(window, document);
 
 
-!angular.$$csp() && angular.element(document).find('head').prepend('<style type="text/css">@charset "UTF-8";\n\n[ng\\:cloak], [ng-cloak], [data-ng-cloak], [x-ng-cloak],\n.ng-cloak, .x-ng-cloak,\n.ng-hide {\n  display: none !important;\n}\n\nng\\:form {\n  display: block;\n}\n</style>');
+!angular.$$csp() && angular.element(document).find('head').prepend('<style type="text/css">@charset "UTF-8";\n\n[ng\\:cloak], [ng-cloak], [data-ng-cloak], [x-ng-cloak],\n.ng-cloak, .x-ng-cloak,\n.ng-hide {\n  display: none !important;\n}\n\nng\\:form {\n  display: block;\n}\n\n/* The styles below ensure that the CSS transition will ALWAYS\n * animate and close. A nasty bug occurs with CSS transitions where\n * when the active class isn\'t set, or if the active class doesn\'t\n * contain any styles to transition to, then, if ngAnimate is used,\n * it will appear as if the webpage is broken due to the forever hanging\n * animations. The clip (!ie) and zoom (ie) CSS properties are used\n * since they trigger a transition without making the browser\n * animate anything and they\'re both highly underused CSS properties */\n.ng-animate-start { clip:rect(0, auto, auto, 0); -ms-zoom:1.0001; }\n.ng-animate-active { clip:rect(-1px, auto, auto, 0); -ms-zoom:1; }\n</style>');
 !angular.$$csp() && angular.element(document).find('head').prepend('<style type="text/css">@charset "UTF-8";\n/* CSS Document */\n\n/** Structure */\nbody {\n  font-family: Arial, sans-serif;\n  margin: 0;\n  font-size: 14px;\n}\n\n#system-error {\n  font-size: 1.5em;\n  text-align: center;\n}\n\n#json, #xml {\n  display: none;\n}\n\n#header {\n  position: fixed;\n  width: 100%;\n}\n\n#specs {\n  padding-top: 50px;\n}\n\n#header .angular {\n  font-family: Courier New, monospace;\n  font-weight: bold;\n}\n\n#header h1 {\n  font-weight: normal;\n  float: left;\n  font-size: 30px;\n  line-height: 30px;\n  margin: 0;\n  padding: 10px 10px;\n  height: 30px;\n}\n\n#application h2,\n#specs h2 {\n  margin: 0;\n  padding: 0.5em;\n  font-size: 1.1em;\n}\n\n#status-legend {\n  margin-top: 10px;\n  margin-right: 10px;\n}\n\n#header,\n#application,\n.test-info,\n.test-actions li {\n  overflow: hidden;\n}\n\n#application {\n  margin: 10px;\n}\n\n#application iframe {\n  width: 100%;\n  height: 758px;\n}\n\n#application .popout {\n  float: right;\n}\n\n#application iframe {\n  border: none;\n}\n\n.tests li,\n.test-actions li,\n.test-it li,\n.test-it ol,\n.status-display {\n  list-style-type: none;\n}\n\n.tests,\n.test-it ol,\n.status-display {\n  margin: 0;\n  padding: 0;\n}\n\n.test-info {\n  margin-left: 1em;\n  margin-top: 0.5em;\n  border-radius: 8px 0 0 8px;\n  -webkit-border-radius: 8px 0 0 8px;\n  -moz-border-radius: 8px 0 0 8px;\n  cursor: pointer;\n}\n\n.test-info:hover .test-name {\n  text-decoration: underline;\n}\n\n.test-info .closed:before {\n  content: \'\\25b8\\00A0\';\n}\n\n.test-info .open:before {\n  content: \'\\25be\\00A0\';\n  font-weight: bold;\n}\n\n.test-it ol {\n  margin-left: 2.5em;\n}\n\n.status-display,\n.status-display li {\n  float: right;\n}\n\n.status-display li {\n  padding: 5px 10px;\n}\n\n.timer-result,\n.test-title {\n  display: inline-block;\n  margin: 0;\n  padding: 4px;\n}\n\n.test-actions .test-title,\n.test-actions .test-result {\n  display: table-cell;\n  padding-left: 0.5em;\n  padding-right: 0.5em;\n}\n\n.test-actions {\n  display: table;\n}\n\n.test-actions li {\n  display: table-row;\n}\n\n.timer-result {\n  width: 4em;\n  padding: 0 10px;\n  text-align: right;\n  font-family: monospace;\n}\n\n.test-it pre,\n.test-actions pre {\n  clear: left;\n  color: black;\n  margin-left: 6em;\n}\n\n.test-describe {\n  padding-bottom: 0.5em;\n}\n\n.test-describe .test-describe {\n  margin: 5px 5px 10px 2em;\n}\n\n.test-actions .status-pending .test-title:before {\n  content: \'\\00bb\\00A0\';\n}\n\n.scrollpane {\n   max-height: 20em;\n   overflow: auto;\n}\n\n/** Colors */\n\n#header {\n  background-color: #F2C200;\n}\n\n#specs h2 {\n  border-top: 2px solid #BABAD1;\n}\n\n#specs h2,\n#application h2 {\n  background-color: #efefef;\n}\n\n#application {\n  border: 1px solid #BABAD1;\n}\n\n.test-describe .test-describe {\n  border-left: 1px solid #BABAD1;\n  border-right: 1px solid #BABAD1;\n  border-bottom: 1px solid #BABAD1;\n}\n\n.status-display {\n  border: 1px solid #777;\n}\n\n.status-display .status-pending,\n.status-pending .test-info {\n  background-color: #F9EEBC;\n}\n\n.status-display .status-success,\n.status-success .test-info {\n  background-color: #B1D7A1;\n}\n\n.status-display .status-failure,\n.status-failure .test-info {\n  background-color: #FF8286;\n}\n\n.status-display .status-error,\n.status-error .test-info {\n  background-color: black;\n  color: white;\n}\n\n.test-actions .status-success .test-title {\n  color: #30B30A;\n}\n\n.test-actions .status-failure .test-title {\n  color: #DF0000;\n}\n\n.test-actions .status-error .test-title {\n  color: black;\n}\n\n.test-actions .timer-result {\n  color: #888;\n}\n</style>');
