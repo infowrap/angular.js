@@ -420,6 +420,27 @@ describe("ngAnimate", function() {
         expect(element.children().length).toBe(0);
       }));
 
+      it("should retain existing styles of the animated element",
+        inject(function($animate, $rootScope, $sniffer, $timeout) {
+
+        element.append(child);
+        child.attr('style', 'width: 20px');
+        
+        $animate.addClass(child, 'ng-hide');
+        $animate.leave(child);
+        $rootScope.$digest();
+
+        if($sniffer.transitions) {
+          $timeout.flush();
+
+          //this is to verify that the existing style is appended with a semicolon automatically 
+          expect(child.attr('style')).toMatch(/width: 20px;.+?/i);
+          browserTrigger(child,'transitionend', { timeStamp: Date.now() + 1000, elapsedTime: 1 });
+        }
+        
+        expect(child.attr('style')).toMatch(/width: 20px/i);
+      }));
+
       it("should call the cancel callback when another animation is called on the same element",
         inject(function($animate, $rootScope, $sniffer, $timeout) {
 
@@ -823,7 +844,7 @@ describe("ngAnimate", function() {
           $timeout.flush();
 
           //IE removes the -ms- prefix when placed on the style
-          var fallbackProperty = $sniffer.msie ? 'zoom' : 'clip';
+          var fallbackProperty = $sniffer.msie ? 'zoom' : 'border-spacing';
           var regExp = new RegExp("transition-property:\\s+color\\s*,\\s*" + fallbackProperty + "\\s*;");
           expect(child2.attr('style') || '').toMatch(regExp);
           expect(child2.hasClass('ng-animate')).toBe(true);
@@ -974,6 +995,35 @@ describe("ngAnimate", function() {
             }
             expect(element).toBeShown();
         }));
+
+        it("should NOT overwrite styles with outdated values when animation completes",
+          inject(function($animate, $rootScope, $compile, $sniffer, $timeout) {
+
+            if(!$sniffer.transitions) return;
+
+            var style = '-webkit-transition-duration: 1s, 2000ms, 1s;' +
+                        '-webkit-transition-property: height, left, opacity;' +
+                                'transition-duration: 1s, 2000ms, 1s;' +
+                                 'transition-property: height, left, opacity;';
+
+            ss.addRule('.ng-hide-add', style);
+            ss.addRule('.ng-hide-remove', style);
+
+            element = $compile(html('<div style="width: 100px">foo</div>'))($rootScope);
+            element.addClass('ng-hide');
+
+            $animate.removeClass(element, 'ng-hide');
+
+            $timeout.flush();
+
+            var now = Date.now();
+            browserTrigger(element,'transitionend', { timeStamp: now + 1000, elapsedTime: 1 });
+            browserTrigger(element,'transitionend', { timeStamp: now + 1000, elapsedTime: 1 });
+
+            element.css('width', '200px');
+            browserTrigger(element,'transitionend', { timeStamp: now + 2000, elapsedTime: 2 });
+            expect(element.css('width')).toBe("200px");
+          }));
 
         it("should animate for the highest duration",
           inject(function($animate, $rootScope, $compile, $sniffer, $timeout) {
@@ -2515,6 +2565,36 @@ describe("ngAnimate", function() {
     expect(element.hasClass('yellow-add')).toBe(true);
   }));
 
+  it("should cancel and perform the dom operation only after the reflow has run",
+    inject(function($compile, $rootScope, $animate, $sniffer, $timeout) {
+
+    if (!$sniffer.transitions) return;
+
+    ss.addRule('.green-add', '-webkit-transition:1s linear all;' +
+                                     'transition:1s linear all;');
+
+    ss.addRule('.red-add', '-webkit-transition:1s linear all;' +
+                                   'transition:1s linear all;');
+
+    var element = $compile('<div></div>')($rootScope);
+    $rootElement.append(element);
+    jqLite($document[0].body).append($rootElement);
+
+    $animate.addClass(element, 'green');
+    expect(element.hasClass('green-add')).toBe(true);
+
+    $animate.addClass(element, 'red');
+    expect(element.hasClass('red-add')).toBe(true);
+
+    expect(element.hasClass('green')).toBe(false);
+    expect(element.hasClass('red')).toBe(false);
+
+    $timeout.flush();
+
+    expect(element.hasClass('green')).toBe(true);
+    expect(element.hasClass('red')).toBe(true);
+  }));
+
   it('should enable and disable animations properly on the root element', function() {
     var count = 0;
     module(function($animateProvider) {
@@ -2599,4 +2679,96 @@ describe("ngAnimate", function() {
     });
   });
 
+  it('should only perform the DOM operation once',
+    inject(function($sniffer, $compile, $rootScope, $rootElement, $animate, $timeout) {
+
+    if (!$sniffer.transitions) return;
+
+    ss.addRule('.base-class', '-webkit-transition:1s linear all;' +
+                                      'transition:1s linear all;');
+
+    $animate.enabled(true);
+
+    var element = $compile('<div class="base-class one two"></div>')($rootScope);
+    $rootElement.append(element);
+    jqLite($document[0].body).append($rootElement);
+
+    $animate.removeClass(element, 'base-class one two');
+
+    //still true since we're before the reflow
+    expect(element.hasClass('base-class')).toBe(true);
+
+    //this will cancel the remove animation
+    $animate.addClass(element, 'base-class one two');
+
+    //the cancellation was a success and the class was added right away
+    //since there was no successive animation for the after animation
+    expect(element.hasClass('base-class')).toBe(true);
+
+    //the reflow...
+    $timeout.flush();
+
+    //the reflow DOM operation was commenced but it ran before so it
+    //shouldn't run agaun
+    expect(element.hasClass('base-class')).toBe(true);
+  }));
+
+  it('should block and unblock transitions before the dom operation occurs',
+    inject(function($rootScope, $compile, $rootElement, $document, $animate, $sniffer, $timeout) {
+
+    if (!$sniffer.transitions) return;
+
+    $animate.enabled(true);
+
+    ss.addRule('.cross-animation', '-webkit-transition:1s linear all;' +
+                                           'transition:1s linear all;');
+
+    var capturedProperty = 'none';
+
+    var element = $compile('<div class="cross-animation"></div>')($rootScope);
+    $rootElement.append(element);
+    jqLite($document[0].body).append($rootElement);
+
+    var node = element[0];
+    node._setAttribute = node.setAttribute;
+    node.setAttribute = function(prop, val) {
+      if(prop == 'class' && val.indexOf('trigger-class') >= 0) {
+        var propertyKey = ($sniffer.vendorPrefix == 'Webkit' ? '-webkit-' : '') + 'transition-property';
+        capturedProperty = element.css(propertyKey);
+      }
+      node._setAttribute(prop, val);
+    };
+
+    $animate.addClass(element, 'trigger-class');
+
+    $timeout.flush();
+
+    expect(capturedProperty).not.toBe('none');
+  }));
+
+  it('should block and unblock keyframe animations around the reflow operation',
+    inject(function($rootScope, $compile, $rootElement, $document, $animate, $sniffer, $timeout) {
+
+    if (!$sniffer.animations) return;
+
+    $animate.enabled(true);
+
+    ss.addRule('.cross-animation', '-webkit-animation:1s my_animation;' +
+                                           'animation:1s my_animation;');
+
+    var element = $compile('<div class="cross-animation"></div>')($rootScope);
+    $rootElement.append(element);
+    jqLite($document[0].body).append($rootElement);
+
+    var node = element[0];
+    var animationKey = $sniffer.vendorPrefix == 'Webkit' ? 'WebkitAnimation' : 'animation';
+
+    $animate.addClass(element, 'trigger-class');
+
+    expect(node.style[animationKey]).toContain('none');
+
+    $timeout.flush();
+
+    expect(node.style[animationKey]).not.toContain('none');
+  }));
 });

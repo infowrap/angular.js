@@ -42,7 +42,7 @@ describe('$httpBackend', function() {
         return {};
       }),
       body: {
-        appendChild: jasmine.createSpy('body.appendChid').andCallFake(function(script) {
+        appendChild: jasmine.createSpy('body.appendChild').andCallFake(function(script) {
           fakeDocument.$$scripts.push(script);
         }),
         removeChild: jasmine.createSpy('body.removeChild').andCallFake(function(script) {
@@ -116,6 +116,25 @@ describe('$httpBackend', function() {
       'X-header2': '',
       'X-header3': false
     });
+  });
+
+  it('should not try to read response data when request is aborted', function() {
+    callback.andCallFake(function(status, response, headers) {
+      expect(status).toBe(-1);
+      expect(response).toBe(null);
+      expect(headers).toBe(null);
+    });
+    $backend('GET', '/url', null, callback, {}, 2000);
+    xhr = MockXhr.$$lastInstance;
+    spyOn(xhr, 'abort');
+
+    fakeTimeout.flush();
+    expect(xhr.abort).toHaveBeenCalledOnce();
+
+    xhr.status = 0;
+    xhr.readyState = 4;
+    xhr.onreadystatechange();
+    expect(callback).toHaveBeenCalledOnce();
   });
 
   it('should abort request on timeout', function() {
@@ -273,7 +292,7 @@ describe('$httpBackend', function() {
         script.readyState = 'complete';
         script.onreadystatechange();
       } else {
-        script.onload()
+        script.onload();
       }
 
       expect(callback).toHaveBeenCalledOnce();
@@ -294,13 +313,45 @@ describe('$httpBackend', function() {
         script.readyState = 'complete';
         script.onreadystatechange();
       } else {
-        script.onload()
+        script.onload();
       }
 
       expect(callbacks[callbackId]).toBeUndefined();
       expect(fakeDocument.body.removeChild).toHaveBeenCalledOnceWith(script);
     });
 
+
+    if(msie<=8) {
+
+      it('should attach onreadystatechange handler to the script object', function() {
+        $backend('JSONP', 'http://example.org/path?cb=JSON_CALLBACK', null, noop);
+
+        expect(fakeDocument.$$scripts[0].onreadystatechange).toEqual(jasmine.any(Function));
+
+        var script = fakeDocument.$$scripts[0];
+
+        script.readyState = 'complete';
+        script.onreadystatechange();
+
+        expect(script.onreadystatechange).toBe(null);
+      });
+
+    } else {
+
+      it('should attach onload and onerror handlers to the script object', function() {
+        $backend('JSONP', 'http://example.org/path?cb=JSON_CALLBACK', null, noop);
+
+        expect(fakeDocument.$$scripts[0].onload).toEqual(jasmine.any(Function));
+        expect(fakeDocument.$$scripts[0].onerror).toEqual(jasmine.any(Function));
+
+        var script = fakeDocument.$$scripts[0];
+        script.onload();
+
+        expect(script.onload).toBe(null);
+        expect(script.onerror).toBe(null);
+      });
+
+    }
 
     it('should call callback with status -2 when script fails to load', function() {
       callback.andCallFake(function(status, response) {
@@ -316,7 +367,7 @@ describe('$httpBackend', function() {
         script.readyState = 'complete';
         script.onreadystatechange();
       } else {
-        script.onload()
+        script.onload();
       }
       expect(callback).toHaveBeenCalledOnce();
     });

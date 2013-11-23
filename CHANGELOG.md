@@ -1,3 +1,128 @@
+<a name="1.2.2"></a>
+# 1.2.2 consciousness-inertia (2013-11-22)
+
+
+## Bug Fixes
+
+- **$animate:**
+  - ensure keyframe animations are blocked around the reflow
+  ([6760d7a3](https://github.com/angular/angular.js/commit/6760d7a315d7ea5cbd4f8ab74b200f754a2041f4),
+   [#5018](https://github.com/angular/angular.js/issues/5018))
+  - ensure transition animations are unblocked before the dom operation occurs
+  ([062fbed8](https://github.com/angular/angular.js/commit/062fbed8fc3f7bc55433f8c6915c27520e6f63c5),
+   [#5014](https://github.com/angular/angular.js/issues/5014),
+   [#4265](https://github.com/angular/angular.js/issues/4265))
+  - ensure addClass/removeClass animations do not snap during reflow
+  ([76e4db6f](https://github.com/angular/angular.js/commit/76e4db6f3d15199ac1fbe85f9cfa6079a1c4fa56),
+   [#4892](https://github.com/angular/angular.js/issues/4892))
+  - ensure the DOM operation isn't run twice
+  ([7067a8fb](https://github.com/angular/angular.js/commit/7067a8fb0b18d5b5489006e1960cee721a88b4d2),
+   [#4949](https://github.com/angular/angular.js/issues/4949))
+- **$compile:**
+  - secure form[action] & iframe[srcdoc]
+  ([0421cb42](https://github.com/angular/angular.js/commit/0421cb4200e672818ed10996e92311404c150c3a),
+   [#4927](https://github.com/angular/angular.js/issues/4927),
+   [#4933](https://github.com/angular/angular.js/issues/4933))
+  - ensure CSS classes are added and removed only when necessary
+  ([0cd7e8f2](https://github.com/angular/angular.js/commit/0cd7e8f22721f62b62440bb059ae764ebbe7b42a))
+- **$httpBackend:** only IE8 and below can't use `script.onload` for JSONP
+  ([a3172a28](https://github.com/angular/angular.js/commit/a3172a285fd74b5aa6c8d68a4988c767c06f549c),
+   [#4523](https://github.com/angular/angular.js/issues/4523),
+   [#4527](https://github.com/angular/angular.js/issues/4527),
+   [#4922](https://github.com/angular/angular.js/issues/4922))
+- **$parse:** allow for new lines in expr when promise unwrapping is on
+  ([40647b17](https://github.com/angular/angular.js/commit/40647b179c473f3f470bb1b3237d6f006269582f),
+   [#4718](https://github.com/angular/angular.js/issues/4718))
+- **$resource:** Always return a resource instance when calling class methods on resources.
+  ([f6ecf9a3](https://github.com/angular/angular.js/commit/f6ecf9a3c9090593faf5fa50586c99a56b51c776),
+   [#4545](https://github.com/angular/angular.js/issues/4545),
+   [#5061](https://github.com/angular/angular.js/issues/5061))
+- **httpBackend:** should not read response data when request is aborted
+  ([6f1050df](https://github.com/angular/angular.js/commit/6f1050df4fa885bd59ce85adbef7350ea93911a3),
+   [#4913](https://github.com/angular/angular.js/issues/4913),
+   [#4940](https://github.com/angular/angular.js/issues/4940))
+- **loader:** expose `$$minErr` to modules such as`ngResource`
+  ([9e89a31b](https://github.com/angular/angular.js/commit/9e89a31b129e40c805178535c244899ffafb77d8),
+   [#5050](https://github.com/angular/angular.js/issues/5050))
+- **ngAnimate:**
+  - correctly retain and restore existing styles during and after animation
+  ([c42d0a04](https://github.com/angular/angular.js/commit/c42d0a041890b39fc98afd357ec1307a3a36208d),
+   [#4869](https://github.com/angular/angular.js/issues/4869))
+  - use a fallback CSS property that doesn't break existing styles
+  ([1d50663b](https://github.com/angular/angular.js/commit/1d50663b38ba042e8d748ffa6d48cfb5e93cfd7e),
+   [#4902](https://github.com/angular/angular.js/issues/4902),
+   [#5030](https://github.com/angular/angular.js/issues/5030))
+- **ngClass:** ensure that ngClass only adds/removes the changed classes
+  ([6b8bbe4d](https://github.com/angular/angular.js/commit/6b8bbe4d90640542eed5607a8c91f6b977b1d6c0),
+   [#4960](https://github.com/angular/angular.js/issues/4960),
+   [#4944](https://github.com/angular/angular.js/issues/4944))
+- **ngController:** fix issue with ngInclude on the same element
+  ([6288cf5c](https://github.com/angular/angular.js/commit/6288cf5ca471b0615a026fdb4db3ba242c9d8f88),
+   [#4431](https://github.com/angular/angular.js/issues/4431))
+- **ngInclude:**
+  - Don't throw when the ngInclude element contains content with directives.
+  ([0a7cbb33](https://github.com/angular/angular.js/commit/0a7cbb33b06778833a4d99b1868cc07690a827a7))
+  - allow ngInclude to load scripts when jQuery is included
+  ([c47abd0d](https://github.com/angular/angular.js/commit/c47abd0dd7490576f4b84ee51ebaca385c1036da),
+   [#3756](https://github.com/angular/angular.js/issues/3756))
+- **ngMock:** fixes httpBackend expectation with body object
+  ([4d16472b](https://github.com/angular/angular.js/commit/4d16472b918a3482942d76f1e273a5aa01f65e83),
+   [#4956](https://github.com/angular/angular.js/issues/4956))
+- **ngView:** Don't throw when the ngView element contains content with directives.
+  ([e6521e74](https://github.com/angular/angular.js/commit/e6521e7491242504250b57dd0ee66af49e653c33),
+   [#5069](https://github.com/angular/angular.js/issues/5069))
+- **tests:** Correct tests for IE11
+  ([57924234](https://github.com/angular/angular.js/commit/579242346c4202ea58fc2cae6df232289cbea0bb),
+   [#5046](https://github.com/angular/angular.js/issues/5046))
+- **input:** hold listener during text composition
+  ([a4e6d962](https://github.com/angular/angular.js/commit/a4e6d962d78b26f5112d48c4f88c1e6234d0cae7),
+   [#4684](https://github.com/angular/angular.js/issues/4684))
+
+
+
+
+<a name="1.2.1"></a>
+# 1.2.1 underscore-empathy (2013-11-14)
+
+
+## Bug Fixes
+
+- **$compile:**
+  - accessing controllers of transcluded directives from children
+  ([90f87072](https://github.com/angular/angular.js/commit/90f87072e83234ae366cfeb3c281503c31dad738),
+   [#4935](https://github.com/angular/angular.js/issues/4935))
+  - correctly handle interpolated style in replace templates
+  ([e1254b26](https://github.com/angular/angular.js/commit/e1254b266dfa2d4e3756e4317152dbdbcabe44be),
+   [#4882](https://github.com/angular/angular.js/issues/4882))
+- **$resource:** don't use $parse for @dotted.member
+  ([9577702e](https://github.com/angular/angular.js/commit/9577702e8d2519c1a60f5ac4058e63bd7b919815))
+- **bootstrap:** make IE8 happy
+  ([a61b65d0](https://github.com/angular/angular.js/commit/a61b65d01b468502fe53d68818949d3fcc9f20f6))
+- **loader:** don't rely on internal APIs
+  ([8425e9fe](https://github.com/angular/angular.js/commit/8425e9fe383c17f6a5589c778658c5fc0570ae8f),
+   [#4437](https://github.com/angular/angular.js/issues/4437), [#4874](https://github.com/angular/angular.js/issues/4874))
+- **minErr:** remove references to internal APIs
+  ([94764ee0](https://github.com/angular/angular.js/commit/94764ee08910726db1db7a1101c3001500306dea))
+- **ngIf:** don't create multiple elements when changing from a truthy value to another thruthy value
+  ([4612705e](https://github.com/angular/angular.js/commit/4612705ec297bc6ba714cb7a98f1be6aff77c4b8),
+   [#4852](https://github.com/angular/angular.js/issues/4852))
+- **urlUtils:**
+  - make removal of windows drive from path safer
+  ([89f435de](https://github.com/angular/angular.js/commit/89f435de847635e3ec339726e6f83cf3f0ee9091),
+   [#4939](https://github.com/angular/angular.js/issues/4939))
+  - return right path for file:// on windows
+  ([f925e8ca](https://github.com/angular/angular.js/commit/f925e8caa6c51a7d45ca9ead30601ec2e9d4464c),
+   [#4680](https://github.com/angular/angular.js/issues/4680))
+
+
+## Features
+
+- **$parse:** revert hiding "private" properties
+  ([4ab16aaa](https://github.com/angular/angular.js/commit/4ab16aaaf762e9038803da1f967ac8cb6650727d),
+   [#4926](https://github.com/angular/angular.js/issues/4926), [#4842](https://github.com/angular/angular.js/issues/4842), [#4865](https://github.com/angular/angular.js/issues/4865), [#4859](https://github.com/angular/angular.js/issues/4859), [#4849](https://github.com/angular/angular.js/issues/4849))
+
+
+
 <a name="1.2.0"></a>
 # 1.2.0 timely-delivery (2013-11-08)
 

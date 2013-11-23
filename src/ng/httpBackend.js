@@ -34,6 +34,8 @@ var XHR = window.XMLHttpRequest || function() {
  }
 
 function createHttpBackend($browser, XHR, $browserDefer, callbacks, rawDocument, locationProtocol) {
+  var ABORTED = -1;
+
   // TODO(vojta): fix the signature
   return function(method, url, post, callback, headers, timeout, withCredentials, responseType) {
     var status;
@@ -69,13 +71,19 @@ function createHttpBackend($browser, XHR, $browserDefer, callbacks, rawDocument,
       // always async
       xhr.onreadystatechange = function() {
         if (xhr.readyState == 4) {
-          var responseHeaders = xhr.getAllResponseHeaders();
+          var responseHeaders = null,
+              response = null;
+
+          if(status !== ABORTED) {
+            responseHeaders = xhr.getAllResponseHeaders();
+            response = xhr.responseType ? xhr.response : xhr.responseText;
+          }
 
           // responseText is the old-school way of retrieving response (supported by IE8 & 9)
           // response/responseType properties were introduced in XHR Level2 spec (supported by IE10)
           completeRequest(callback,
               status || xhr.status,
-              (xhr.responseType ? xhr.response : xhr.responseText),
+              response,
               responseHeaders);
         }
       };
@@ -99,7 +107,7 @@ function createHttpBackend($browser, XHR, $browserDefer, callbacks, rawDocument,
 
 
     function timeoutRequest() {
-      status = -1;
+      status = ABORTED;
       jsonpDone && jsonpDone();
       xhr && xhr.abort();
     }
@@ -128,6 +136,7 @@ function createHttpBackend($browser, XHR, $browserDefer, callbacks, rawDocument,
     // - adds and immediately removes script elements from the document
     var script = rawDocument.createElement('script'),
         doneWrapper = function() {
+          script.onreadystatechange = script.onload = script.onerror = null;
           rawDocument.body.removeChild(script);
           if (done) done();
         };
@@ -135,12 +144,16 @@ function createHttpBackend($browser, XHR, $browserDefer, callbacks, rawDocument,
     script.type = 'text/javascript';
     script.src = url;
 
-    if (msie) {
+    if (msie && msie <= 8) {
       script.onreadystatechange = function() {
-        if (/loaded|complete/.test(script.readyState)) doneWrapper();
+        if (/loaded|complete/.test(script.readyState)) {
+          doneWrapper();
+        }
       };
     } else {
-      script.onload = script.onerror = doneWrapper;
+      script.onload = script.onerror = function() {
+        doneWrapper();
+      };
     }
 
     rawDocument.body.appendChild(script);

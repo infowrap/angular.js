@@ -173,8 +173,7 @@ function ngViewFactory(   $route,   $anchorScroll,   $compile,   $controller,   
     terminal: true,
     priority: 400,
     transclude: 'element',
-    compile: function(element, attr, linker) {
-      return function(scope, $element, attr) {
+    link: function(scope, $element, attr, ctrl, $transclude) {
         var currentScope,
             currentElement,
             autoScrollExp = attr.autoscroll,
@@ -200,42 +199,47 @@ function ngViewFactory(   $route,   $anchorScroll,   $compile,   $controller,   
 
           if (template) {
             var newScope = scope.$new();
-            linker(newScope, function(clone) {
-              clone.html(template);
-              $animate.enter(clone, null, currentElement || $element, function onNgViewEnter () {
-                if (angular.isDefined(autoScrollExp)
-                  && (!autoScrollExp || scope.$eval(autoScrollExp))) {
-                  $anchorScroll();
-                }
-              });
 
-              cleanupLastView();
-
-              var link = $compile(clone.contents()),
-                  current = $route.current;
-
-              currentScope = current.scope = newScope;
-              currentElement = clone;
-
-              if (current.controller) {
-                locals.$scope = currentScope;
-                var controller = $controller(current.controller, locals);
-                if (current.controllerAs) {
-                  currentScope[current.controllerAs] = controller;
-                }
-                clone.data('$ngControllerController', controller);
-                clone.children().data('$ngControllerController', controller);
+            // Note: This will also link all children of ng-view that were contained in the original
+            // html. If that content contains controllers, ... they could pollute/change the scope.
+            // However, using ng-view on an element with additional content does not make sense...
+            // Note: We can't remove them in the cloneAttchFn of $transclude as that
+            // function is called before linking the content, which would apply child
+            // directives to non existing elements.
+            var clone = $transclude(newScope, angular.noop);
+            clone.html(template);
+            $animate.enter(clone, null, currentElement || $element, function onNgViewEnter () {
+              if (angular.isDefined(autoScrollExp)
+                && (!autoScrollExp || scope.$eval(autoScrollExp))) {
+                $anchorScroll();
               }
-
-              link(currentScope);
-              currentScope.$emit('$viewContentLoaded');
-              currentScope.$eval(onloadExp);
             });
+
+            cleanupLastView();
+
+            var link = $compile(clone.contents()),
+                current = $route.current;
+
+            currentScope = current.scope = newScope;
+            currentElement = clone;
+
+            if (current.controller) {
+              locals.$scope = currentScope;
+              var controller = $controller(current.controller, locals);
+              if (current.controllerAs) {
+                currentScope[current.controllerAs] = controller;
+              }
+              clone.data('$ngControllerController', controller);
+              clone.children().data('$ngControllerController', controller);
+            }
+
+            link(currentScope);
+            currentScope.$emit('$viewContentLoaded');
+            currentScope.$eval(onloadExp);
           } else {
             cleanupLastView();
           }
         }
-      };
     }
   };
 }

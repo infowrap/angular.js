@@ -392,8 +392,21 @@ var inputType = {
 
 
 function textInputType(scope, element, attr, ctrl, $sniffer, $browser) {
+  // In composition mode, users are still inputing intermediate text buffer,
+  // hold the listener until composition is done.
+  // More about composition events: https://developer.mozilla.org/en-US/docs/Web/API/CompositionEvent
+  var composing = false;
+
+  element.on('compositionstart', function() {
+    composing = true;
+  });
+
+  element.on('compositionend', function() {
+    composing = false;
+  });
 
   var listener = function() {
+    if (composing) return;
     var value = element.val();
 
     // By default we will trim the value
@@ -436,15 +449,15 @@ function textInputType(scope, element, attr, ctrl, $sniffer, $browser) {
       deferListener();
     });
 
-    // if user paste into input using mouse, we need "change" event to catch it
-    element.on('change', listener);
-
     // if user modifies input value using context menu in IE, we need "paste" and "cut" events to catch it
     if ($sniffer.hasEvent('paste')) {
       element.on('paste cut', deferListener);
     }
   }
 
+  // if user paste into input using mouse on older browser
+  // or form autocomplete on newer browser, we need "change" event to catch it
+  element.on('change', listener);
 
   ctrl.$render = function() {
     element.val(ctrl.$isEmpty(ctrl.$viewValue) ? '' : ctrl.$viewValue);
@@ -840,6 +853,11 @@ var VALID_CLASS = 'ng-valid',
  *      }
  *      ngModel.$formatters.push(formatter);
  *      </pre>
+ *
+ * @property {Array.<Function>} $viewChangeListeners Array of functions to execute whenever the
+ *     view value has changed. It is called with no arguments, and its return value is ignored.
+ *     This can be used in place of additional $watches against the model value.
+ *
  * @property {Object} $error An object hash with all errors as keys.
  *
  * @property {boolean} $pristine True if user has not interacted with the control yet.
@@ -1103,14 +1121,19 @@ var NgModelController = ['$scope', '$exceptionHandler', '$attrs', '$element', '$
    * @methodOf ng.directive:ngModel.NgModelController
    *
    * @description
-   * Read a value from view.
+   * Update the view value.
    *
-   * This method should be called from within a DOM event handler.
-   * For example {@link ng.directive:input input} or
+   * This method should be called when the view value changes, typically from within a DOM event handler.
+   * For example {@link ng.directive:input input} and
    * {@link ng.directive:select select} directives call it.
    *
-   * It internally calls all `$parsers` (including validators) and updates the `$modelValue` and the actual model path.
-   * Lastly it calls all registered change listeners.
+   * It will update the $viewValue, then pass this value through each of the functions in `$parsers`,
+   * which includes any validators. The value that comes out of this `$parsers` pipeline, be applied to
+   * `$modelValue` and the **expression** specified in the `ng-model` attribute.
+   * 
+   * Lastly, all the registered change listeners, in the `$viewChangeListeners` list, are called.
+   *
+   * Note that calling this function does not trigger a `$digest`.
    *
    * @param {string} value Value from the view.
    */
