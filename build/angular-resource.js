@@ -1,6 +1,6 @@
 /**
- * @license AngularJS v1.2.1-2a5ca03
- * (c) 2010-2012 Google, Inc. http://angularjs.org
+ * @license AngularJS v1.2.3-3dc7582
+ * (c) 2010-2014 Google, Inc. http://angularjs.org
  * License: MIT
  */
 (function(window, angular, undefined) {'use strict';
@@ -156,7 +156,7 @@ function lookupDottedPath(obj, path) {
  *   usually the resource is assigned to a model which is then rendered by the view. Having an empty
  *   object results in no rendering, once the data arrives from the server then the object is
  *   populated with the data and the view automatically re-renders itself showing the new data. This
- *   means that in most case one never has to write a callback function for the action methods.
+ *   means that in most cases one never has to write a callback function for the action methods.
  *
  *   The action methods on the class object or instance object can be invoked with the following
  *   parameters:
@@ -258,58 +258,6 @@ function lookupDottedPath(obj, path) {
        });
      });
    </pre>
-
- * # Buzz client
-
-   Let's look at what a buzz client created with the `$resource` service looks like:
-    <doc:example>
-    <doc:source jsfiddle="false">
-    <script>
-     function BuzzController($resource) {
-       this.userId = 'googlebuzz';
-       this.Activity = $resource(
-         'https://www.googleapis.com/buzz/v1/activities/:userId/:visibility/:activityId/:comments',
-         {alt:'json', callback:'JSON_CALLBACK'},
-         {
-           get:{method:'JSONP', params:{visibility:'@self'}},
-           replies: {method:'JSONP', params:{visibility:'@self', comments:'@comments'}}
-         }
-       );
-     }
-
-     BuzzController.prototype = {
-       fetch: function() {
-         this.activities = this.Activity.get({userId:this.userId});
-       },
-       expandReplies: function(activity) {
-         activity.replies = this.Activity.replies({userId:this.userId, activityId:activity.id});
-       }
-     };
-     BuzzController.$inject = ['$resource'];
-    </script>
-
-    <div ng-controller="BuzzController">
-     <input ng-model="userId"/>
-     <button ng-click="fetch()">fetch</button>
-     <hr/>
-     <div ng-repeat="item in activities.data.items">
-       <h1 style="font-size: 15px;">
-         <img src="{{item.actor.thumbnailUrl}}" style="max-height:30px;max-width:30px;"/>
-         <a href="{{item.actor.profileUrl}}">{{item.actor.name}}</a>
-         <a href ng-click="expandReplies(item)" style="float: right;">Expand replies:
-           {{item.links.replies[0].count}}</a>
-       </h1>
-       {{item.object.content | html}}
-       <div ng-repeat="reply in item.replies.data.items" style="margin-left: 20px;">
-         <img src="{{reply.actor.thumbnailUrl}}" style="max-height:30px;max-width:30px;"/>
-         <a href="{{reply.actor.profileUrl}}">{{reply.actor.name}}</a>: {{reply.content | html}}
-       </div>
-     </div>
-    </div>
-    </doc:source>
-    <doc:scenario>
-    </doc:scenario>
-    </doc:example>
  */
 angular.module('ngResource', ['ng']).
   factory('$resource', ['$http', '$q', function($http, $q) {
@@ -496,7 +444,7 @@ angular.module('ngResource', ['ng']).
           }
           /* jshint +W086 */ /* (purposefully fall through case statements) */
 
-          var isInstanceCall = data instanceof Resource;
+          var isInstanceCall = this instanceof Resource;
           var value = isInstanceCall ? data : (action.isArray ? [] : new Resource(data));
           var httpConfig = {};
           var responseInterceptor = action.interceptor && action.interceptor.response ||
@@ -579,7 +527,7 @@ angular.module('ngResource', ['ng']).
           if (isFunction(params)) {
             error = success; success = params; params = {};
           }
-          var result = Resource[name](params, this, success, error);
+          var result = Resource[name].call(this, params, this, success, error);
           return result.$promise || result;
         };
       });
