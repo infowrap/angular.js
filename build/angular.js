@@ -1,5 +1,5 @@
 /**
- * @license AngularJS v1.2.3-3dc7582
+ * @license AngularJS v1.2.4-f95c372
  * (c) 2010-2014 Google, Inc. http://angularjs.org
  * License: MIT
  */
@@ -68,7 +68,7 @@ function minErr(module) {
       return match;
     });
 
-    message = message + '\nhttp://errors.angularjs.org/1.2.3-3dc7582/' +
+    message = message + '\nhttp://errors.angularjs.org/1.2.4-f95c372/' +
       (module ? module + '/' : '') + code;
     for (i = 2; i < arguments.length; i++) {
       message = message + (i == 2 ? '?' : '&') + 'p' + (i-2) + '=' +
@@ -623,7 +623,7 @@ var trim = (function() {
   // TODO: we should move this into IE/ES5 polyfill
   if (!String.prototype.trim) {
     return function(value) {
-      return isString(value) ? value.replace(/^\s*/, '').replace(/\s*$/, '') : value;
+      return isString(value) ? value.replace(/^\s\s*/, '').replace(/\s\s*$/, '') : value;
     };
   }
   return function(value) {
@@ -847,7 +847,7 @@ function shallowCopy(src, dst) {
 
   for(var key in src) {
     // shallowCopy is only ever called by $compile nodeLinkFn, which has control over src
-    // so we don't need to worry hasOwnProperty here
+    // so we don't need to worry about using our custom hasOwnProperty here
     if (src.hasOwnProperty(key) && key.substr(0, 2) !== '$$') {
       dst[key] = src[key];
     }
@@ -1802,6 +1802,7 @@ function setupModuleLoader(window) {
     $ParseProvider,
     $RootScopeProvider,
     $QProvider,
+    $$SanitizeUriProvider,
     $SceProvider,
     $SceDelegateProvider,
     $SnifferProvider,
@@ -1825,11 +1826,11 @@ function setupModuleLoader(window) {
  * - `codeName` – `{string}` – Code name of the release, such as "jiggling-armfat".
  */
 var version = {
-  full: '1.2.3-3dc7582',    // all of these placeholder strings will be replaced by grunt's
+  full: '1.2.4-f95c372',    // all of these placeholder strings will be replaced by grunt's
   major: 1,    // package task
   minor: 2,
-  dot: 3,
-  codeName: 'unicorn-zapper'
+  dot: 4,
+  codeName: 'wormhole-baster'
 };
 
 
@@ -1873,6 +1874,10 @@ function publishExternalAPI(angular){
 
   angularModule('ng', ['ngLocale'], ['$provide',
     function ngModule($provide) {
+      // $$sanitizeUriProvider needs to be before $compileProvider as it is used by it.
+      $provide.provider({
+        $$sanitizeUri: $$SanitizeUriProvider
+      });
       $provide.provider('$compile', $CompileProvider).
         directive({
             a: htmlAnchorDirective,
@@ -2766,7 +2771,11 @@ forEach({
   },
 
   find: function(element, selector) {
-    return element.getElementsByTagName(selector);
+    if (element.getElementsByTagName) {
+      return element.getElementsByTagName(selector);
+    } else {
+      return [];
+    }
   },
 
   clone: jqLiteClone,
@@ -3096,7 +3105,7 @@ function annotate(fn) {
  *     // ...
  *   }
  *   // Define function dependencies
- *   MyController.$inject = ['$scope', '$route'];
+ *   MyController['$inject'] = ['$scope', '$route'];
  *
  *   // Then
  *   expect(injector.annotate(MyController)).toEqual(['$scope', '$route']);
@@ -4798,7 +4807,7 @@ function $TemplateCacheProvider() {
  * * (no prefix) - Locate the required controller on the current element. Throw an error if not found.
  * * `?` - Attempt to locate the required controller or pass `null` to the `link` fn if not found.
  * * `^` - Locate the required controller by searching the element's parents. Throw an error if not found.
- * * `?^` - Attempt to locate the required controller by searching the element's parentsor pass `null` to the
+ * * `?^` - Attempt to locate the required controller by searching the element's parents or pass `null` to the
  *   `link` fn if not found.
  *
  *
@@ -4889,7 +4898,7 @@ function $TemplateCacheProvider() {
  * </div>
  *
  * <div class="alert alert-error">
- * **Note:** The `transclude` function that is passed to the compile function is deperecated, as it
+ * **Note:** The `transclude` function that is passed to the compile function is deprecated, as it
  *   e.g. does not know about the right outer scope. Please use the transclude function that is passed
  *   to the link function instead.
  * </div>
@@ -5099,14 +5108,12 @@ var $compileMinErr = minErr('$compile');
  *
  * @description
  */
-$CompileProvider.$inject = ['$provide'];
-function $CompileProvider($provide) {
+$CompileProvider.$inject = ['$provide', '$$sanitizeUriProvider'];
+function $CompileProvider($provide, $$sanitizeUriProvider) {
   var hasDirectives = {},
       Suffix = 'Directive',
       COMMENT_DIRECTIVE_REGEXP = /^\s*directive\:\s*([\d\w\-_]+)\s+(.*)$/,
-      CLASS_DIRECTIVE_REGEXP = /(([\d\w\-_]+)(?:\:([^;]+))?;?)/,
-      aHrefSanitizationWhitelist = /^\s*(https?|ftp|mailto|tel|file):/,
-      imgSrcSanitizationWhitelist = /^\s*(https?|ftp|file):|data:image\//;
+      CLASS_DIRECTIVE_REGEXP = /(([\d\w\-_]+)(?:\:([^;]+))?;?)/;
 
   // Ref: http://developers.whatwg.org/webappapis.html#event-handler-idl-attributes
   // The assumption is that future DOM event attribute names will begin with
@@ -5190,10 +5197,11 @@ function $CompileProvider($provide) {
    */
   this.aHrefSanitizationWhitelist = function(regexp) {
     if (isDefined(regexp)) {
-      aHrefSanitizationWhitelist = regexp;
+      $$sanitizeUriProvider.aHrefSanitizationWhitelist(regexp);
       return this;
+    } else {
+      return $$sanitizeUriProvider.aHrefSanitizationWhitelist();
     }
-    return aHrefSanitizationWhitelist;
   };
 
 
@@ -5220,18 +5228,18 @@ function $CompileProvider($provide) {
    */
   this.imgSrcSanitizationWhitelist = function(regexp) {
     if (isDefined(regexp)) {
-      imgSrcSanitizationWhitelist = regexp;
+      $$sanitizeUriProvider.imgSrcSanitizationWhitelist(regexp);
       return this;
+    } else {
+      return $$sanitizeUriProvider.imgSrcSanitizationWhitelist();
     }
-    return imgSrcSanitizationWhitelist;
   };
-
 
   this.$get = [
             '$injector', '$interpolate', '$exceptionHandler', '$http', '$templateCache', '$parse',
-            '$controller', '$rootScope', '$document', '$sce', '$animate',
+            '$controller', '$rootScope', '$document', '$sce', '$animate', '$$sanitizeUri',
     function($injector,   $interpolate,   $exceptionHandler,   $http,   $templateCache,   $parse,
-             $controller,   $rootScope,   $document,   $sce,   $animate) {
+             $controller,   $rootScope,   $document,   $sce,   $animate,   $$sanitizeUri) {
 
     var Attributes = function(element, attr) {
       this.$$element = element;
@@ -5336,16 +5344,7 @@ function $CompileProvider($provide) {
         // sanitize a[href] and img[src] values
         if ((nodeName === 'A' && key === 'href') ||
             (nodeName === 'IMG' && key === 'src')) {
-          // NOTE: urlResolve() doesn't support IE < 8 so we don't sanitize for that case.
-          if (!msie || msie >= 8 ) {
-            normalizedVal = urlResolve(value).href;
-            if (normalizedVal !== '') {
-              if ((key === 'href' && !normalizedVal.match(aHrefSanitizationWhitelist)) ||
-                  (key === 'src' && !normalizedVal.match(imgSrcSanitizationWhitelist))) {
-                this[key] = value = 'unsafe:' + normalizedVal;
-              }
-            }
-          }
+          this[key] = value = $$sanitizeUri(value, key === 'src');
         }
 
         if (writeAttr !== false) {
@@ -7816,14 +7815,13 @@ var XHR = window.XMLHttpRequest || function() {
  * During testing this implementation is swapped with {@link ngMock.$httpBackend mock
  * $httpBackend} which can be trained with responses.
  */
- function $HttpBackendProvider() {
-   this.$get = ['$browser', '$window', '$document', function($browser, $window, $document) {
-     return createHttpBackend($browser, XHR, $browser.defer, $window.angular.callbacks,
-         $document[0], $window.location.protocol.replace(':', ''));
-   }];
- }
+function $HttpBackendProvider() {
+  this.$get = ['$browser', '$window', '$document', function($browser, $window, $document) {
+    return createHttpBackend($browser, XHR, $browser.defer, $window.angular.callbacks, $document[0]);
+  }];
+}
 
-function createHttpBackend($browser, XHR, $browserDefer, callbacks, rawDocument, locationProtocol) {
+function createHttpBackend($browser, XHR, $browserDefer, callbacks, rawDocument) {
   var ABORTED = -1;
 
   // TODO(vojta): fix the signature
@@ -7903,14 +7901,14 @@ function createHttpBackend($browser, XHR, $browserDefer, callbacks, rawDocument,
     }
 
     function completeRequest(callback, status, response, headersString) {
-      var protocol = locationProtocol || urlResolve(url).protocol;
+      var protocol = urlResolve(url).protocol;
 
       // cancel timeout and subsequent timeout promise resolution
       timeoutId && $browserDefer.cancel(timeoutId);
       jsonpDone = xhr = null;
 
       // fix status code for file protocol (it's always 0)
-      status = (protocol == 'file') ? (response ? 200 : 404) : status;
+      status = (protocol == 'file' && status === 0) ? (response ? 200 : 404) : status;
 
       // normalize IE bug (http://bugs.jquery.com/ticket/1450)
       status = status == 1223 ? 204 : status;
@@ -8530,7 +8528,47 @@ function LocationHashbangUrl(appBase, hashPrefix) {
           hashPrefix);
     }
     parseAppUrl(withoutHashUrl, this, appBase);
+
+    this.$$path = removeWindowsDriveName(this.$$path, withoutHashUrl, appBase);
+
     this.$$compose();
+
+    /*
+     * In Windows, on an anchor node on documents loaded from
+     * the filesystem, the browser will return a pathname
+     * prefixed with the drive name ('/C:/path') when a
+     * pathname without a drive is set:
+     *  * a.setAttribute('href', '/foo')
+     *   * a.pathname === '/C:/foo' //true
+     *
+     * Inside of Angular, we're always using pathnames that
+     * do not include drive names for routing.
+     */
+    function removeWindowsDriveName (path, url, base) {
+      /*
+      Matches paths for file protocol on windows,
+      such as /C:/foo/bar, and captures only /foo/bar.
+      */
+      var windowsFilePathExp = /^\/?.*?:(\/.*)/;
+
+      var firstPathSegmentMatch;
+
+      //Get the relative path from the input URL.
+      if (url.indexOf(base) === 0) {
+        url = url.replace(base, '');
+      }
+
+      /*
+       * The input URL intentionally contains a
+       * first path segment that ends with a colon.
+       */
+      if (windowsFilePathExp.exec(url)) {
+        return path;
+      }
+
+      firstPathSegmentMatch = windowsFilePathExp.exec(path);
+      return firstPathSegmentMatch ? firstPathSegmentMatch[1] : path;
+    }
   };
 
   /**
@@ -9213,23 +9251,24 @@ function ensureSafeMemberName(name, fullExpression) {
 
 function ensureSafeObject(obj, fullExpression) {
   // nifty check if obj is Function that is fast and works across iframes and other contexts
-  if (obj && obj.constructor === obj) {
-    throw $parseMinErr('isecfn',
-        'Referencing Function in Angular expressions is disallowed! Expression: {0}',
-        fullExpression);
-  } else if (// isWindow(obj)
-      obj && obj.document && obj.location && obj.alert && obj.setInterval) {
-    throw $parseMinErr('isecwindow',
-        'Referencing the Window in Angular expressions is disallowed! Expression: {0}',
-        fullExpression);
-  } else if (// isElement(obj)
-      obj && (obj.nodeName || (obj.on && obj.find))) {
-    throw $parseMinErr('isecdom',
-        'Referencing DOM nodes in Angular expressions is disallowed! Expression: {0}',
-        fullExpression);
-  } else {
-    return obj;
+  if (obj) {
+    if (obj.constructor === obj) {
+      throw $parseMinErr('isecfn',
+          'Referencing Function in Angular expressions is disallowed! Expression: {0}',
+          fullExpression);
+    } else if (// isWindow(obj)
+        obj.document && obj.location && obj.alert && obj.setInterval) {
+      throw $parseMinErr('isecwindow',
+          'Referencing the Window in Angular expressions is disallowed! Expression: {0}',
+          fullExpression);
+    } else if (// isElement(obj)
+        obj.children && (obj.nodeName || (obj.on && obj.find))) {
+      throw $parseMinErr('isecdom',
+          'Referencing DOM nodes in Angular expressions is disallowed! Expression: {0}',
+          fullExpression);
+    }
   }
+  return obj;
 }
 
 var OPERATORS = {
@@ -11088,7 +11127,7 @@ function $RootScopeProvider(){
        *
        */
       $new: function(isolate) {
-        var Child,
+        var ChildScope,
             child;
 
         if (isolate) {
@@ -11098,11 +11137,11 @@ function $RootScopeProvider(){
           child.$$asyncQueue = this.$$asyncQueue;
           child.$$postDigestQueue = this.$$postDigestQueue;
         } else {
-          Child = function() {}; // should be anonymous; This is so that when the minifier munges
+          ChildScope = function() {}; // should be anonymous; This is so that when the minifier munges
             // the name it does not become random set of chars. This will then show up as class
             // name in the debugger.
-          Child.prototype = this;
-          child = new Child();
+          ChildScope.prototype = this;
+          child = new ChildScope();
           child.$id = nextUid();
         }
         child['this'] = child;
@@ -11182,7 +11221,7 @@ function $RootScopeProvider(){
 
 
 
-           // Using a listener function 
+           // Using a listener function
            var food;
            scope.foodCounter = 0;
            expect(scope.foodCounter).toEqual(0);
@@ -11207,7 +11246,7 @@ function $RootScopeProvider(){
            // Update food and run digest.  Now the counter will increment
            food = 'cheeseburger';
            scope.$digest();
-           expect(scope.foodCounter).toEqual(1);  
+           expect(scope.foodCounter).toEqual(1);
 
        * </pre>
        *
@@ -11626,7 +11665,7 @@ function $RootScopeProvider(){
        *
        *    - `string`: execute using the rules as defined in  {@link guide/expression expression}.
        *    - `function(scope)`: execute the function with the current `scope` parameter.
-       * 
+       *
        * @param {(object)=} locals Local variables object, useful for overriding values in scope.
        * @returns {*} The result of evaluating the expression.
        */
@@ -11955,6 +11994,79 @@ function $RootScopeProvider(){
      */
     function initWatchVal() {}
   }];
+}
+
+/**
+ * @description
+ * Private service to sanitize uris for links and images. Used by $compile and $sanitize.
+ */
+function $$SanitizeUriProvider() {
+  var aHrefSanitizationWhitelist = /^\s*(https?|ftp|mailto|tel|file):/,
+    imgSrcSanitizationWhitelist = /^\s*(https?|ftp|file):|data:image\//;
+
+  /**
+   * @description
+   * Retrieves or overrides the default regular expression that is used for whitelisting of safe
+   * urls during a[href] sanitization.
+   *
+   * The sanitization is a security measure aimed at prevent XSS attacks via html links.
+   *
+   * Any url about to be assigned to a[href] via data-binding is first normalized and turned into
+   * an absolute url. Afterwards, the url is matched against the `aHrefSanitizationWhitelist`
+   * regular expression. If a match is found, the original url is written into the dom. Otherwise,
+   * the absolute url is prefixed with `'unsafe:'` string and only then is it written into the DOM.
+   *
+   * @param {RegExp=} regexp New regexp to whitelist urls with.
+   * @returns {RegExp|ng.$compileProvider} Current RegExp if called without value or self for
+   *    chaining otherwise.
+   */
+  this.aHrefSanitizationWhitelist = function(regexp) {
+    if (isDefined(regexp)) {
+      aHrefSanitizationWhitelist = regexp;
+      return this;
+    }
+    return aHrefSanitizationWhitelist;
+  };
+
+
+  /**
+   * @description
+   * Retrieves or overrides the default regular expression that is used for whitelisting of safe
+   * urls during img[src] sanitization.
+   *
+   * The sanitization is a security measure aimed at prevent XSS attacks via html links.
+   *
+   * Any url about to be assigned to img[src] via data-binding is first normalized and turned into
+   * an absolute url. Afterwards, the url is matched against the `imgSrcSanitizationWhitelist`
+   * regular expression. If a match is found, the original url is written into the dom. Otherwise,
+   * the absolute url is prefixed with `'unsafe:'` string and only then is it written into the DOM.
+   *
+   * @param {RegExp=} regexp New regexp to whitelist urls with.
+   * @returns {RegExp|ng.$compileProvider} Current RegExp if called without value or self for
+   *    chaining otherwise.
+   */
+  this.imgSrcSanitizationWhitelist = function(regexp) {
+    if (isDefined(regexp)) {
+      imgSrcSanitizationWhitelist = regexp;
+      return this;
+    }
+    return imgSrcSanitizationWhitelist;
+  };
+
+  this.$get = function() {
+    return function sanitizeUri(uri, isImage) {
+      var regex = isImage ? imgSrcSanitizationWhitelist : aHrefSanitizationWhitelist;
+      var normalizedVal;
+      // NOTE: urlResolve() doesn't support IE < 8 so we don't sanitize for that case.
+      if (!msie || msie >= 8 ) {
+        normalizedVal = urlResolve(uri).href;
+        if (normalizedVal !== '' && !normalizedVal.match(regex)) {
+          return 'unsafe:'+normalizedVal;
+        }
+      }
+      return uri;
+    };
+  };
 }
 
 var $sceMinErr = minErr('$sce');
@@ -13306,11 +13418,6 @@ function $TimeoutProvider() {
 // exactly the behavior needed here.  There is little value is mocking these out for this
 // service.
 var urlParsingNode = document.createElement("a");
-/*
-Matches paths for file protocol on windows,
-such as /C:/foo/bar, and captures only /foo/bar.
-*/
-var windowsFilePathExp = /^\/?.*?:(\/.*)/;
 var originUrl = urlResolve(window.location.href, true);
 
 
@@ -13367,8 +13474,7 @@ var originUrl = urlResolve(window.location.href, true);
  *
  */
 function urlResolve(url, base) {
-  var href = url,
-      pathname;
+  var href = url;
 
   if (msie) {
     // Normalize before parse.  Refer Implementation Notes on why this is
@@ -13379,21 +13485,6 @@ function urlResolve(url, base) {
 
   urlParsingNode.setAttribute('href', href);
 
-  /*
-   * In Windows, on an anchor node on documents loaded from
-   * the filesystem, the browser will return a pathname
-   * prefixed with the drive name ('/C:/path') when a
-   * pathname without a drive is set:
-   *  * a.setAttribute('href', '/foo')
-   *   * a.pathname === '/C:/foo' //true
-   *
-   * Inside of Angular, we're always using pathnames that
-   * do not include drive names for routing.
-   */
-
-  pathname = removeWindowsDriveName(urlParsingNode.pathname, url, base);
-  pathname = (pathname.charAt(0) === '/') ? pathname : '/' + pathname;
-
   // urlParsingNode provides the UrlUtils interface - http://url.spec.whatwg.org/#urlutils
   return {
     href: urlParsingNode.href,
@@ -13403,10 +13494,11 @@ function urlResolve(url, base) {
     hash: urlParsingNode.hash ? urlParsingNode.hash.replace(/^#/, '') : '',
     hostname: urlParsingNode.hostname,
     port: urlParsingNode.port,
-    pathname: pathname
+    pathname: (urlParsingNode.pathname.charAt(0) === '/')
+      ? urlParsingNode.pathname
+      : '/' + urlParsingNode.pathname
   };
 }
-
 
 /**
  * Parse a request URL and determine whether this is a same-origin request as the application document.
@@ -13419,26 +13511,6 @@ function urlIsSameOrigin(requestUrl) {
   var parsed = (isString(requestUrl)) ? urlResolve(requestUrl) : requestUrl;
   return (parsed.protocol === originUrl.protocol &&
           parsed.host === originUrl.host);
-}
-
-function removeWindowsDriveName (path, url, base) {
-  var firstPathSegmentMatch;
-
-  //Get the relative path from the input URL.
-  if (url.indexOf(base) === 0) {
-    url = url.replace(base, '');
-  }
-
-  /*
-   * The input URL intentionally contains a
-   * first path segment that ends with a colon.
-   */
-  if (windowsFilePathExp.exec(url)) {
-    return path;
-  }
-
-  firstPathSegmentMatch = windowsFilePathExp.exec(path);
-  return firstPathSegmentMatch ? firstPathSegmentMatch[1] : path;
 }
 
 /**
@@ -13461,13 +13533,15 @@ function removeWindowsDriveName (path, url, base) {
      <doc:source>
        <script>
          function Ctrl($scope, $window) {
-           $scope.$window = $window;
            $scope.greeting = 'Hello, World!';
+           $scope.doGreeting = function(greeting) {
+               $window.alert(greeting);
+           };
          }
        </script>
        <div ng-controller="Ctrl">
          <input type="text" ng-model="greeting" />
-         <button ng-click="$window.alert(greeting)">ALERT</button>
+         <button ng-click="doGreeting(greeting)">ALERT</button>
        </div>
      </doc:source>
      <doc:scenario>
@@ -14974,9 +15048,22 @@ var nullFormCtrl = {
  * @property {Object} $error Is an object hash, containing references to all invalid controls or
  *  forms, where:
  *
- *  - keys are validation tokens (error names) — such as `required`, `url` or `email`,
- *  - values are arrays of controls or forms that are invalid with given error.
+ *  - keys are validation tokens (error names),
+ *  - values are arrays of controls or forms that are invalid for given error name.
  *
+ *
+ *  Built-in validation tokens:
+ *
+ *  - `email`
+ *  - `max`
+ *  - `maxlength`
+ *  - `min`
+ *  - `minlength`
+ *  - `number`
+ *  - `pattern`
+ *  - `required`
+ *  - `url`
+ * 
  * @description
  * `FormController` keeps track of all its controls and nested forms as well as state of them,
  * such as being valid/invalid or dirty/pristine.
